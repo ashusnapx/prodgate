@@ -1,0 +1,17 @@
+#!/bin/bash
+# prodgate requires caveman and ponytail: every agent it runs loads both at ultra.
+# Exits 0 when both are installed (as Claude Code plugins or as skills), otherwise prints how to install them.
+home="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+has() {
+  grep -q "\"$1@" "$home/plugins/installed_plugins.json" 2>/dev/null ||
+    [ -f "$home/skills/$1/SKILL.md" ] || [ -f ".claude/skills/$1/SKILL.md" ]
+}
+missing=()
+has caveman || missing+=("caveman:  claude plugin marketplace add JuliusBrussee/caveman && claude plugin install caveman@caveman")
+has ponytail || missing+=("ponytail: claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail")
+if [ ${#missing[@]} -gt 0 ]; then
+  echo "prodgate needs these plugins (every agent runs them at ultra). Install, restart Claude Code, run again:" >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  exit 1
+fi
+echo "prodgate: caveman and ponytail found; every agent runs both at ultra"

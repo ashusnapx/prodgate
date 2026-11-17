@@ -13,16 +13,17 @@ export const meta = {
 }
 
 // args: {mode, repo, sha, base, scope, machines, seen, hot, strict, commands, clusters,
-//        fix (default true), preamble, lean (default true), qaRun, scratch,
+//        fix (default true), preamble, qaRun, scratch,
 //        models: {map, hunt, light, verify, prove, fix, design}, designAgents: {critic, simplicity}, maxHunters}
 const A = args || {}
-// Every agent runs lean by default: caveman at its strongest measured voice (ultra) and ponytail ultra
-// when those plugins are installed, plus read-once rules that cut input, where most tokens go.
+// Required in every agent, with no opt-out: caveman at ultra (its strongest measured voice) and
+// ponytail at ultra (smallest complete change), plus read-once rules that cut input, where most tokens go.
 const LEAN =
-  'Token rules. If the caveman skill is installed, call Skill caveman with args "ultra" first; if the ponytail skill is installed, call Skill ponytail with args "ultra". ' +
-  'Always: no prose between tool calls; grep -n first, then read only the line ranges you need; never read a file twice; never print whole files; ' +
+  'REQUIRED before anything else: call the Skill tool with skill "caveman" (args "ultra"), then skill "ponytail" (args "ultra"), and follow both for the whole task. ' +
+  'If either skill is missing, stop and answer only "prodgate needs the caveman and ponytail plugins". ' +
+  'Then: no prose between tool calls; grep -n first, then read only the line ranges you need; never read a file twice; never print whole files; ' +
   'final answer = the schema only, terse fragments, code, paths and errors verbatim.\n\n'
-const PRE = (A.preamble ? `${A.preamble.trim()}\n\n` : '') + (A.lean === false ? '' : LEAN)
+const PRE = LEAN + (A.preamble ? `${A.preamble.trim()}\n\n` : '')
 const RUN = A.qaRun || 'qa-run'
 const M = A.models || {}
 const SCRATCH = A.scratch || '/tmp/prodgate-prove'

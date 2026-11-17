@@ -49,23 +49,54 @@ Status columns, boolean flags, nullable timestamps, job queues, sessions, wizard
 
 ## Install
 
-As a Claude Code plugin:
+**1. Install prodgate**, in one line with npx:
+
+```bash
+npx skills add ashusnapx/prodgate
+```
+
+Or as a Claude Code plugin:
 
 ```text
 /plugin marketplace add ashusnapx/prodgate
 /plugin install prodgate@prodgate
 ```
 
-Or as a plain skill:
+**2. Install the two plugins prodgate requires.** Every agent prodgate runs uses both at their maximum setting, and prodgate refuses to start without them:
 
 ```bash
-git clone https://github.com/ashusnapx/prodgate
-ln -s "$PWD/prodgate/skills/prodgate" ~/.claude/skills/prodgate
+claude plugin marketplace add JuliusBrussee/caveman && claude plugin install caveman@caveman
+claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail
 ```
 
-Then, in any repo, say `/prodgate`, "run QA", "make it prod ready" or "bug hunt until zero".
+**3. Run it.** In any repo, say `/prodgate`, "run QA", "set up a QA pipeline", "make it prod ready" or "bug hunt until zero".
 
-It works on any language Claude Code can read. Optional extras make it sharper and cheaper: [caveman](https://github.com/JuliusBrussee/caveman) and [ponytail](https://github.com/DietrichGebert/ponytail) (every agent runs them at `ultra` when installed), the code-review-graph MCP (blast radius), and `gitleaks`, `npm audit` and `pip-audit` for the gate.
+It works on any language Claude Code can read. Optional extras make the gate sharper: the code-review-graph MCP (blast radius), plus `gitleaks`, `npm audit` and `pip-audit`.
+
+## Standing on the shoulders of caveman and ponytail
+
+prodgate's token discipline comes from two open-source projects. Every agent prodgate starts loads both at `ultra`, with no opt-out.
+
+<table>
+<tr>
+<td width="50%" align="center" valign="top">
+<a href="https://github.com/JuliusBrussee/caveman"><img src="https://raw.githubusercontent.com/JuliusBrussee/caveman/main/docs/assets/caveman-logo-banner.png" alt="caveman" width="320"></a>
+<br><br>
+<b><a href="https://github.com/JuliusBrussee/caveman">caveman</a></b> by <a href="https://github.com/JuliusBrussee">Julius Brussee</a>
+<br><br>
+Makes agents say less and read less. prodgate uses <code>ultra</code>, the strongest measured voice: <b>35% fewer output tokens than "be concise"</b>, by caveman's own measurement. When the caveman CLI is installed, prodgate's test runner also uses <code>caveman shrink</code>.
+</td>
+<td width="50%" align="center" valign="top">
+<a href="https://github.com/DietrichGebert/ponytail"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/DietrichGebert/ponytail/main/assets/logo-dark.png"><img src="https://raw.githubusercontent.com/DietrichGebert/ponytail/main/assets/logo.png" alt="ponytail" width="220"></picture></a>
+<br><br>
+<b><a href="https://github.com/DietrichGebert/ponytail">ponytail</a></b> by <a href="https://github.com/DietrichGebert">Dietrich Gebert</a>
+<br><br>
+Makes agents write the smallest complete change. prodgate uses <code>ultra</code>, so fixers question the request first. By ponytail's own benchmark: <b>45% fewer tokens and 53% less code</b>, with 98% of risky logic shipping with a test.
+</td>
+</tr>
+</table>
+
+<sub>Logos belong to their projects and are shown here only to credit them. prodgate works with caveman and ponytail; it is not affiliated with or endorsed by either. caveman is Apache-2.0, ponytail is MIT.</sub>
 
 ## Built to waste nothing
 

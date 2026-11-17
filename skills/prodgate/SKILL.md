@@ -1,6 +1,6 @@
 ---
 name: prodgate
-description: The QA pipeline for every repo. Takes code to production quality by finding and fixing state bugs (races, stuck states, stale overwrites, illegal transitions, missing tenant checks, double submits, lost UI state) in rounds on frozen commits until a round finds nothing, then runs a production gate. Every bug it reports comes with a failing test. Use when the user says "prodgate", "run QA", "make it prod ready", "bug hunt until zero", "loop until 0 bugs", or asks to find the implicit state machines in an app. Use this instead of ad-hoc bug-hunt loops.
+description: The QA pipeline for every repo. Takes code to production quality by finding and fixing state bugs (races, stuck states, stale overwrites, illegal transitions, missing tenant checks, double submits, lost UI state) in rounds on frozen commits until a round finds nothing, then runs a production gate. Every bug it reports comes with a failing test. Use when the user says "prodgate", "run QA", "QA pipeline", "set up QA", "QA my app", "make it prod ready", "production readiness check", "bug hunt", "bug hunt until zero", "loop until 0 bugs", "find race conditions", or asks to find the implicit state machines in an app. Use this instead of ad-hoc bug-hunt loops or one-off reviews whenever the goal is shipping safely.
 ---
 
 # prodgate
@@ -8,6 +8,13 @@ description: The QA pipeline for every repo. Takes code to production quality by
 QA that ends in "safe for production", without wasted tokens. Each check runs once, on code that is not changing, and is recorded so it is never repeated. A bug counts only when a test proves it.
 
 `<skill>` below means this skill's base directory (the folder this file was loaded from).
+
+## Required: caveman and ponytail at ultra
+
+prodgate does not run without the [caveman](https://github.com/JuliusBrussee/caveman) and [ponytail](https://github.com/DietrichGebert/ponytail) plugins. Every agent it runs, and this session for the whole run, loads both at their maximum: caveman `ultra` (its strongest measured voice) and ponytail `ultra` (the smallest complete change, with the request questioned first).
+- First, run `<skill>/bin/require-plugins`. If it fails, show its install lines and stop.
+- Then call the Skill tool with skill `caveman` (args `ultra`) and skill `ponytail` (args `ultra`) in this session.
+- The workflow puts the same requirement at the top of every agent's prompt, with no opt-out. Any other agent you start during prodgate (gate reviewers, the contract check, security) starts its prompt with: `REQUIRED before anything else: call the Skill tool with skill "caveman" (args "ultra"), then skill "ponytail" (args "ultra"), and follow both for the whole task.`
 
 ## Rules (never break them)
 
@@ -23,6 +30,7 @@ QA that ends in "safe for production", without wasted tokens. Each check runs on
 ## Files
 
 - `<skill>/bin/ledger.py`: the ledger at `~/.claude/qa/<repo>-<hash>/ledger.json` (or `$PRODGATE_HOME`). It holds the map, coverage, seen keys, streaks and per-kind noise.
+- `<skill>/bin/require-plugins`: checks that caveman and ponytail are installed, and prints their install lines if not.
 - `<skill>/bin/qa-run`: runs a test or build command under the shared lock. It prints one line on a pass, and the failing lines plus the tail on a fail.
 - `<skill>/prodgate.workflow.js`: runs one round (map, or hunt → verify → prove or fix). Run it with the Workflow tool, `{scriptPath, args}`.
 
@@ -68,7 +76,7 @@ QA that ends in "safe for production", without wasted tokens. Each check runs on
 
 ## Token rules
 
-- Each agent starts lean (the workflow adds this unless `lean: false`): caveman at `ultra` and ponytail at `ultra` if those plugins are installed. It reads by line range after `grep -n`, never reads a file twice, and answers with the schema only.
+- Every agent starts with caveman `ultra` and ponytail `ultra` (required, no opt-out). It reads by line range after `grep -n`, never reads a file twice, and answers with the schema only.
 - After round 1, hunters get only the scope files, their machines from the map and the seen keys. They never get the whole repo.
 - High-risk machines (two actors at once, money, auth, tenancy, deletion) get their own hunter. Low-risk ones are packed together and can run on `models.light`.
 - Verifiers read only the cited lines and their callers. Provers and fixers get one group of files each.

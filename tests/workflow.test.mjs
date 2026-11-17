@@ -18,7 +18,7 @@ test('map returns the machines from every cluster', async () => {
   const { result, calls } = await run({ mode: 'map', repo: '/r', sha: 'abc', clusters: [{ name: 'x', paths: ['a'] }, { name: 'y', paths: ['b'] }] }, () => ({ machines: [{ id: 'm' }] }))
   assert.equal(result.machines.length, 2)
   assert.match(calls[0].prompt, /Find all of the implicit state machines in my app/)
-  assert.match(calls[0].prompt, /caveman.*ultra.*ponytail.*ultra/s)
+  assert.match(calls[0].prompt, /^REQUIRED.*caveman.*ultra.*ponytail.*ultra/s)
 })
 
 test('empty scope spends no agents', async () => {
@@ -73,8 +73,17 @@ test('hot machines go to design, not to fixers', async () => {
   assert.equal(result.held_for_design.length, 1)
 })
 
-test('lean: false and a custom preamble are respected', async () => {
-  const { calls } = await run({ ...base, lean: false, preamble: 'HELLO', fix: false }, label => (label.startsWith('hunt') ? { findings: [] } : null))
-  assert.match(calls[0].prompt, /^HELLO\n\n/)
-  assert.doesNotMatch(calls[0].prompt, /Token rules/)
+test('caveman and ponytail at ultra are required in every agent, even with a custom preamble', async () => {
+  const fake = label => {
+    if (label.startsWith('hunt')) return { findings: [finding('a.py', 10, 'one')] }
+    if (label.startsWith('verify')) return { results: [{ key: 'a.py::one', verdict: 'confirmed', evidence: 'a.py:10' }] }
+    if (label.endsWith(':plan')) return { machine: 'm1', plan: 'merge' }
+    if (label.startsWith('design')) return 'critique'
+  }
+  const { calls } = await run({ ...base, lean: false, preamble: 'HELLO', hot: ['m1'] }, fake)
+  assert.ok(calls.length >= 5)
+  for (const c of calls) {
+    assert.match(c.prompt, /^REQUIRED before anything else: call the Skill tool with skill "caveman" \(args "ultra"\), then skill "ponytail" \(args "ultra"\)/, c.label)
+    assert.match(c.prompt, /HELLO/, c.label)
+  }
 })
