@@ -8,6 +8,7 @@ Race conditions · stuck states · stale overwrites · illegal transitions · mi
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-black?style=flat-square)](LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757?style=flat-square)](#install)
+[![skills.sh](https://skills.sh/b/ashusnapx/prodgate)](https://skills.sh/ashusnapx/prodgate)
 [![Benchmark: 8 apps, 59 seeded bugs](https://img.shields.io/badge/benchmark-8%20apps%20%C2%B7%2059%20seeded%20bugs-2F6FEB?style=flat-square)](bench/)
 
 </div>
