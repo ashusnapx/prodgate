@@ -14,7 +14,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Workflow control flow (fake agents)
-        run: node --test tests/
+        run: node --test tests/*.test.mjs
       - name: Ledger and scorer
         run: python -m unittest discover -s tests -v
       - name: Shell syntax

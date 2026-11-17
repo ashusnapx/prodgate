@@ -16,4 +16,4 @@ pick_node() {
 }
 
 NODE_BIN="$(pick_node)"
-exec "$NODE_BIN" --test tests/
+exec "$NODE_BIN" --test tests/*.test.ts
