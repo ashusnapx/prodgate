@@ -1,0 +1,95 @@
+{
+  "app": "billing",
+  "bugs": [
+    {
+      "id": "bi-1",
+      "class": "double-submit",
+      "file": "app/services/invoices.py",
+      "lines": [58, 65],
+      "function": "record_payment",
+      "summary": "record_payment adds a Payment and increments amount_paid_cents with no check that this charge was already recorded; a charge whose API response said succeeded is counted again when its payment.succeeded webhook arrives (or when reconcile and the webhook both settle it), doubling the paid amount and the refundable balance",
+      "repro": "POST /subscriptions on a 1000-cent plan: the charge succeeds and invoice 1 shows amount_paid_cents=1000; the provider then sends payment.succeeded for the same charge (new event id); invoice 1 shows 2000 paid and POST /invoices/1/refunds can refund 2000",
+      "severity": "high"
+    },
+    {
+      "id": "bi-2",
+      "class": "illegal-transition",
+      "file": "app/services/invoices.py",
+      "lines": [66, 73],
+      "function": "_mark_paid_up",
+      "summary": "when an invoice becomes paid the subscription is set to active whatever its status, so a payment that settles after cancellation brings a canceled subscription back",
+      "repro": "a charge for invoice 1 is processing; the merchant cancels the subscription now (the pending invoice is not voided); payment.succeeded for invoice 1 arrives; the subscription is active again",
+      "severity": "high"
+    },
+    {
+      "id": "bi-3",
+      "class": "double-submit",
+      "file": "app/services/refunds.py",
+      "lines": [10, 33],
+      "function": "refund_invoice",
+      "summary": "the Idempotency-Key check is a SELECT, then the provider refund call, then the INSERT, with no unique constraint on (invoice_id, idempotency_key) and no lock; a client retry that arrives while the first request is still waiting on the provider passes the check and refunds again",
+      "repro": "POST /invoices/1/refunds {amount_cents: 500} with Idempotency-Key k1 times out client-side and is retried with k1; both requests find no refund for k1, both call provider.refund, and the customer is refunded 1000 with two Refund rows",
+      "severity": "high"
+    },
+    {
+      "id": "bi-4",
+      "class": "overwrite",
+      "file": "app/services/invoices.py",
+      "lines": [76, 81],
+      "function": "mark_payment_failed",
+      "summary": "a payment.failed event is applied even when the invoice is already paid; an out-of-order failure for an earlier attempt turns a paid invoice into failed and its active subscription into past_due",
+      "repro": "invoice 1 is pending; payment.succeeded arrives (invoice paid, subscription active); then the delayed payment.failed for the earlier declined attempt arrives; invoice 1 is failed and the subscription past_due although it was paid",
+      "severity": "high"
+    },
+    {
+      "id": "bi-5",
+      "class": "stuck",
+      "file": "app/services/invoices.py",
+      "lines": [30, 55],
+      "function": "pay_invoice",
+      "summary": "pay_invoice commits status=pending before calling the provider and does nothing if the call fails or its response is lost; charge_id stays NULL, reconcile only looks at pending invoices that have a charge_id, and pay refuses pending invoices, so unless a webhook happens to arrive the invoice is pending forever",
+      "repro": "the provider times out during POST /subscriptions (502); invoice 1 is pending with no charge_id; two hours and several billing runs later it is still pending and POST /invoices/1/pay returns 409",
+      "severity": "high"
+    },
+    {
+      "id": "bi-6",
+      "class": "scope",
+      "file": "app/services/subscriptions.py",
+      "lines": [82, 86],
+      "function": "change_plan",
+      "summary": "change_plan looks the new plan up by code alone, not by the merchant's account, so a subscription can be moved onto another merchant's plan (for example a free one)",
+      "repro": "merchant acct_other has plan vip-free at 0 cents; acct_sunrise's subscriber POSTs /subscriptions/1/change-plan {plan_code: vip-free}; it returns 200 and the subscription now points at acct_other's plan and renews at 0",
+      "severity": "high"
+    },
+    {
+      "id": "bi-7",
+      "class": "illegal-transition",
+      "file": "app/services/cycle.py",
+      "lines": [14, 32],
+      "function": "end_trials",
+      "summary": "ending a trial ignores cancel_at_period_end: a subscription canceled during its trial is moved to active and charged for a full period instead of being canceled at trial end",
+      "repro": "subscribe to a 14-day trial plan; POST /subscriptions/1/cancel {at_period_end: true}; after day 14 the billing run sets it active, invoices 5000 cents and charges the card",
+      "severity": "high"
+    }
+  ],
+  "decoys": [
+    {
+      "id": "bi-d1",
+      "file": "app/services/webhooks.py",
+      "lines": [20, 33],
+      "why_correct": "the duplicate check is a read before the insert, but the event id is the primary key and is inserted in the same transaction as the handler's effects; a concurrent duplicate fails with IntegrityError at flush and its whole transaction rolls back"
+    },
+    {
+      "id": "bi-d2",
+      "file": "app/services/subscriptions.py",
+      "lines": [97, 116],
+      "why_correct": "the request_id lookup at the top is check-then-act, but the plan switch is a compare-and-swap on plan_id and (subscription_id, request_id) is unique; a concurrent retry loses the swap or the insert, rolls back its proration invoice and returns the winner's result"
+    },
+    {
+      "id": "bi-d3",
+      "file": "app/services/cycle.py",
+      "lines": [35, 58],
+      "why_correct": "two overlapping runs can both select the same due subscription, but the period roll is UPDATE ... WHERE current_period_end = the end it read, with a rowcount check before the invoice is created, so a period is invoiced once"
+    }
+  ]
+}

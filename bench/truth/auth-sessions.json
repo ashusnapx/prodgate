@@ -1,0 +1,85 @@
+{
+  "app": "auth-sessions",
+  "bugs": [
+    {
+      "id": "au-1",
+      "class": "race",
+      "file": "app/services/signin.py",
+      "lines": [42, 56],
+      "function": "sign_in",
+      "summary": "sign-in checks the password against the user row it read, then inserts the session later with nothing tying it to that password; an admin reset that commits in between revokes the existing sessions but not the one about to be inserted, so a session opened with the old password survives the reset (and, holding must_set_password, can set a new password without the current one)",
+      "repro": "bo signs in with his old password; after verify_password succeeds and before open_session inserts, an admin resets bo's password (sessions revoked, must_set_password=true); the new session is then inserted, authenticates fine, and POST /me/password {new_password} from it takes over the account",
+      "severity": "high"
+    },
+    {
+      "id": "au-2",
+      "class": "overwrite",
+      "file": "app/services/users.py",
+      "lines": [134, 146],
+      "function": "set_own_password",
+      "summary": "set-own-password writes the new hash onto the user row loaded at authentication, with no check that the password is unchanged since; an admin reset committed meanwhile is overwritten, so the admin's one-time password stops working and the person who raced it keeps a password of their choosing",
+      "repro": "bo calls POST /me/password {current_password, new_password}; while the new hash is being computed an admin resets bo's password and hands over temp T; bo's request commits its hash over T; T no longer signs in, bo's new password does",
+      "severity": "high"
+    },
+    {
+      "id": "au-3",
+      "class": "illegal-transition",
+      "file": "app/services/signin.py",
+      "lines": [59, 75],
+      "function": "_accept_invite",
+      "summary": "first sign-in accepts the user's latest invite without checking it is still pending; revoking an invite leaves the account invited with its one-time password, so a revoked invite is moved to accepted and the account becomes active",
+      "repro": "admin invites bo (temp T) then POST /admin/invites/1/revoke; bo signs in with T: 200, invite 1 becomes accepted and bo is active",
+      "severity": "high"
+    },
+    {
+      "id": "au-4",
+      "class": "illegal-transition",
+      "file": "app/deps.py",
+      "lines": [32, 35],
+      "function": "require_admin",
+      "summary": "require_admin is built on current_auth instead of ready_auth, so an admin still holding a one-time password can use every /admin route without choosing their own password",
+      "repro": "admin invites cy as an admin (temp T); cy signs in with T (must_set_password=true); GET /admin/users and POST /admin/invites with cy's token return 200/201 instead of 403",
+      "severity": "medium"
+    },
+    {
+      "id": "au-5",
+      "class": "scope",
+      "file": "app/routers/me.py",
+      "lines": [28, 31],
+      "function": "revoke_session",
+      "summary": "DELETE /me/sessions/{id} revokes the session by id without checking it belongs to the caller, so any signed-in user can sign anyone else out",
+      "repro": "member bo calls DELETE /me/sessions/1 where session 1 is the admin's; the admin's token now gets 401",
+      "severity": "medium"
+    },
+    {
+      "id": "au-6",
+      "class": "stuck",
+      "file": "app/services/users.py",
+      "lines": [55, 83],
+      "function": "create_invite",
+      "summary": "inviting refuses any address that already has a user row, including an invited account whose invite expired; sign-in refuses the expired invite and reset refuses invited users, so the account can never join",
+      "repro": "admin invites bo; 8 days pass; bo's sign-in gets 403 invite expired; POST /admin/invites {email: bo} returns 409 already has an account; POST /admin/users/{bo}/reset-password returns 409; bo is stuck invited",
+      "severity": "medium"
+    }
+  ],
+  "decoys": [
+    {
+      "id": "au-d1",
+      "file": "app/services/signin.py",
+      "lines": [15, 39],
+      "why_correct": "the counter reads the bucket first, but the increment is a single UPDATE ... SET attempts = attempts + 1 WHERE attempts < max with a rowcount check, and the window reset is a compare-and-swap on window_started_at; concurrent attempts cannot exceed five per window and the >= boundary opens the next window at exactly one minute"
+    },
+    {
+      "id": "au-d2",
+      "file": "app/services/sessions.py",
+      "lines": [43, 52],
+      "why_correct": "renewal runs after the revoked check, but it is UPDATE ... WHERE revoked_at IS NULL and never writes revoked_at, so a sign-out landing in between stays in force"
+    },
+    {
+      "id": "au-d3",
+      "file": "app/services/users.py",
+      "lines": [122, 131],
+      "why_correct": "a sign-in racing a disable can still insert a session after revoke_all_for_user, but authenticate refuses sessions whose user is not active and disabled accounts cannot be re-enabled, so that session can never be used"
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "app": "documents",
+  "bugs": [
+    {
+      "id": "doc-1",
+      "class": "overwrite",
+      "file": "app/services/readings.py",
+      "lines": [47, 68],
+      "function": "complete_reading",
+      "summary": "a finished reading sets document.status = ready unconditionally, so a document withdrawn while a slow re-read was running comes back when the result arrives",
+      "repro": "document 1 is ready; POST /documents/1/reread (reading 2 running); POST /documents/1/withdraw; the reader posts /internal/readings/2/result; document 1 is ready again and shows in listings and search",
+      "severity": "high"
+    },
+    {
+      "id": "doc-2",
+      "class": "stuck",
+      "file": "app/services/documents.py",
+      "lines": [100, 120],
+      "function": "restore_document",
+      "summary": "restore puts back the status saved at withdraw time; if the document was withdrawn while processing and its reading failed or expired meanwhile, it is restored as processing with nothing running, and re-read refuses a processing document, so it never leaves that state",
+      "repro": "document 1 is ready; reread starts reading 2; withdraw document 1; the reader posts /internal/readings/2/error; restore document 1: it is processing forever and POST /documents/1/reread returns 409",
+      "severity": "medium"
+    },
+    {
+      "id": "doc-3",
+      "class": "wrong-item",
+      "file": "app/services/projects.py",
+      "lines": [29, 40],
+      "function": "rename_project",
+      "summary": "rename moves documents found by list_documents, which skips withdrawn ones; withdrawn documents keep the old project code, so after restore they are missing from the renamed project and appear in any new project that takes the old code",
+      "repro": "project atlas has documents A and B; withdraw B; PATCH /projects/atlas {code: atlas-2}; restore B; B is not listed under atlas-2; create a new project atlas and B is listed there",
+      "severity": "medium"
+    },
+    {
+      "id": "doc-4",
+      "class": "double-submit",
+      "file": "app/services/documents.py",
+      "lines": [48, 77],
+      "function": "upload_document",
+      "summary": "duplicate detection is a SELECT by content hash followed by an INSERT with no unique constraint or lock, so two uploads of the same file at once (double-click, client retry) both pass the check and store two live copies with two readings",
+      "repro": "two POST /projects/atlas/documents with identical bytes run together; both see no live document with that SHA-256, both insert; the project lists two documents with the same hash and the reader is called twice",
+      "severity": "medium"
+    },
+    {
+      "id": "doc-5",
+      "class": "scope",
+      "file": "app/routers/documents.py",
+      "lines": [62, 64],
+      "function": "get_reading",
+      "summary": "GET /readings/{id} takes no organisation and loads the reading by id alone, returning another organisation's extracted text",
+      "repro": "org northwind's document has reading 1; GET /readings/1 with X-Org-Id: contoso (or no header) returns 200 with northwind's text",
+      "severity": "high"
+    },
+    {
+      "id": "doc-6",
+      "class": "illegal-transition",
+      "file": "app/services/readings.py",
+      "lines": [71, 89],
+      "function": "fail_reading",
+      "summary": "an error callback is applied whatever the reading's state; a late or repeated error for a reading that already finished turns a done, current reading into failed and not current, leaving the ready document with no current reading",
+      "repro": "reading 1 posts /result (done, current); the reader's earlier attempt then posts /internal/readings/1/error; GET /documents/1/reading returns 404 and search no longer finds the document although it is still ready",
+      "severity": "medium"
+    },
+    {
+      "id": "doc-7",
+      "class": "stuck",
+      "file": "app/services/readings.py",
+      "lines": [92, 102],
+      "function": "expire_stale_readings",
+      "summary": "the sweeper fails unanswered readings with a bulk UPDATE on readings only; their documents stay processing, and re-read refuses processing documents, so a document whose reader request was lost is stuck",
+      "repro": "upload a document and the reader never answers; 35 minutes later POST /internal/readings/expire returns {expired: 1}; the document is still processing and POST /documents/1/reread returns 409 forever",
+      "severity": "high"
+    }
+  ],
+  "decoys": [
+    {
+      "id": "doc-d1",
+      "file": "app/services/readings.py",
+      "lines": [31, 44],
+      "why_correct": "start_reread flips the document to processing with UPDATE ... WHERE status IN (ready, failed) and checks rowcount, so two concurrent re-reads start one reading and the other gets 409"
+    },
+    {
+      "id": "doc-d2",
+      "file": "app/services/documents.py",
+      "lines": [80, 97],
+      "why_correct": "withdraw leaves the readings marked current, but search requires status = ready and the current-reading and download routes refuse withdrawn documents; the status change is a compare-and-swap on the status it read, so a concurrent re-read makes it fail with 409 instead of saving a stale status"
+    },
+    {
+      "id": "doc-d3",
+      "file": "app/services/readings.py",
+      "lines": [12, 17],
+      "why_correct": "max(version) + 1 is not guarded by a lock, but a reading is only created for a brand-new document or after start_reread's compare-and-swap, and (document_id, version) is unique, so two readings can never share a version"
+    }
+  ]
+}

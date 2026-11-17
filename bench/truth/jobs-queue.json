@@ -1,0 +1,105 @@
+{
+  "app": "jobs-queue",
+  "bugs": [
+    {
+      "id": "jq-1",
+      "class": "race",
+      "file": "app/services/jobs.py",
+      "lines": [92, 110],
+      "function": "claim_next_job",
+      "summary": "two workers can claim the same job: the queued job is SELECTed, then updated through the ORM with no status guard or rowcount check",
+      "repro": "job 1 is queued; worker w1 selects it; before w1 commits, worker w2 selects and claims job 1; w1 then commits its UPDATE ... WHERE id=1; both claims return job 1 and it runs twice (two 'claimed' events, lease_owner ends as w1)",
+      "severity": "high"
+    },
+    {
+      "id": "jq-2",
+      "class": "stuck",
+      "file": "app/services/recovery.py",
+      "lines": [13, 21],
+      "function": "find_stale_jobs",
+      "summary": "the sweeper only finds running jobs whose last_heartbeat_at is older than the cutoff, but claim_next_job never sets last_heartbeat_at; a worker that crashes before its first heartbeat leaves the job running forever (NULL < cutoff is never true)",
+      "repro": "enqueue a job; w1 claims it and dies without heartbeating; advance the clock an hour; POST /worker/recover returns [] and the job stays running with lease_owner w1 forever",
+      "severity": "high"
+    },
+    {
+      "id": "jq-3",
+      "class": "overwrite",
+      "file": "app/services/recovery.py",
+      "lines": [24, 45],
+      "function": "recover_stale_jobs",
+      "summary": "the sweeper loads stale jobs, then writes status=queued through the ORM with no WHERE status='running' guard; a slow worker that completes the job in between has its succeeded status overwritten and the job runs again",
+      "repro": "w1 claims job 1 and heartbeats once; 120 s pass; the sweeper selects job 1; w1 completes it (succeeded, output stored); the sweeper commits status=queued, lease_owner=NULL; job 1 is back on the queue and runs a second time",
+      "severity": "high"
+    },
+    {
+      "id": "jq-4",
+      "class": "double-submit",
+      "file": "app/services/jobs.py",
+      "lines": [124, 142],
+      "function": "complete_job",
+      "summary": "complete guards only on lease_owner, and lease_owner is kept after success; a worker repeating its complete call (after a timeout) passes the guard again and stores a second output and 'succeeded' event",
+      "repro": "w1 claims job 1 and POSTs /worker/jobs/1/complete {output:{n:1}}; the response times out and w1 repeats the call; it returns 200 and GET /jobs/1/outputs lists two outputs",
+      "severity": "medium"
+    },
+    {
+      "id": "jq-5",
+      "class": "stuck",
+      "file": "app/services/batches.py",
+      "lines": [41, 62],
+      "function": "on_job_finished",
+      "summary": "fan-in counts only succeeded and dead jobs as ended; canceled jobs are never counted, so a batch with any canceled job never reaches total_jobs and stays open forever (no callback)",
+      "repro": "create a batch of 2 jobs; complete the first; cancel the second; GET /batches/{id} stays status=open with counts {succeeded:1, canceled:1} and the callback job is never queued",
+      "severity": "medium"
+    },
+    {
+      "id": "jq-6",
+      "class": "race",
+      "file": "app/services/jobs.py",
+      "lines": [182, 194],
+      "function": "cancel_job",
+      "summary": "cancel reads the job, checks it is not terminal, then writes canceled through the ORM; a worker completing the job in between is overwritten, leaving a canceled job that already produced its output",
+      "repro": "w1 is running job 1; a user cancels it; after cancel's status check, w1's complete commits succeeded with an output; cancel then commits status=canceled; job 1 shows canceled with an output and its batch counts it as canceled",
+      "severity": "medium"
+    },
+    {
+      "id": "jq-7",
+      "class": "illegal-transition",
+      "file": "app/services/jobs.py",
+      "lines": [197, 210],
+      "function": "retry_job",
+      "summary": "manual retry only refuses queued and running jobs, so succeeded and canceled jobs (final states) can be sent back to the queue and run again",
+      "repro": "job 1 succeeds; POST /jobs/1/retry returns 200 with status=queued, attempts=0; a worker claims and runs it again",
+      "severity": "medium"
+    },
+    {
+      "id": "jq-8",
+      "class": "scope",
+      "file": "app/routers/jobs.py",
+      "lines": [36, 38],
+      "function": "cancel_job",
+      "summary": "the cancel route takes no tenant and calls jobs.cancel_job by id alone, so any caller can cancel another tenant's job",
+      "repro": "tenant acme creates job 1; POST /jobs/1/cancel with X-Tenant-Id: globex (or no header) returns 200 and acme's job is canceled",
+      "severity": "high"
+    }
+  ],
+  "decoys": [
+    {
+      "id": "jq-d1",
+      "file": "app/services/jobs.py",
+      "lines": [71, 89],
+      "why_correct": "the idempotency check is a read-then-insert, but (tenant_id, idempotency_key) has a unique constraint; a concurrent duplicate fails the flush with IntegrityError, which rolls back and returns the winner's job"
+    },
+    {
+      "id": "jq-d2",
+      "file": "app/services/jobs.py",
+      "lines": [113, 121],
+      "why_correct": "heartbeat is a single UPDATE ... WHERE status='running' AND lease_owner=worker with a rowcount check, so it cannot revive a canceled, recovered or finished job"
+    },
+    {
+      "id": "jq-d3",
+      "file": "app/services/batches.py",
+      "lines": [53, 62],
+      "why_correct": "two jobs finishing at once may both see the batch as done, but the close is UPDATE ... WHERE status='open' and the callback is queued only when rowcount == 1, so the batch closes and calls back once"
+    }
+  ]
+}

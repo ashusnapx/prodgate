@@ -8,7 +8,7 @@ Race conditions · stuck states · stale overwrites · illegal transitions · mi
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-black?style=flat-square)](LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757?style=flat-square)](#install)
-[![Benchmark: 8 apps, 60+ seeded bugs](https://img.shields.io/badge/benchmark-8%20apps%20%C2%B7%2060%2B%20seeded%20bugs-2F6FEB?style=flat-square)](bench/)
+[![Benchmark: 8 apps, 59 seeded bugs](https://img.shields.io/badge/benchmark-8%20apps%20%C2%B7%2059%20seeded%20bugs-2F6FEB?style=flat-square)](bench/)
 
 </div>
 
@@ -79,7 +79,7 @@ Most of an agent run's cost is the input it reads, re-sent on every turn. prodga
 
 ## Benchmark
 
-[`bench/`](bench/) is a public benchmark for state-bug finders: **8 realistic apps** (FastAPI + SQLAlchemy, plus TypeScript UI state), each with **6 to 9 seeded bugs** across 8 bug classes and **2 to 3 decoys**, code that looks wrong but is correct. Every seeded bug was confirmed with a failing test, every decoy with a passing one, and every app's own test suite passes with the bugs in place.
+[`bench/`](bench/) is a public benchmark for state-bug finders: **8 realistic apps** (FastAPI + SQLAlchemy, plus TypeScript UI state), with **59 seeded bugs** across 8 bug classes and **24 decoys**, code that looks wrong but is correct. Every seeded bug was confirmed with a failing test, every decoy with a passing one, and every app's own test suite passes with the bugs in place.
 
 It compares three ways to find bugs:
 
