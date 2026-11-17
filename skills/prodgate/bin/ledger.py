@@ -9,7 +9,7 @@ Lives at ~/.claude/qa/<repo>-<hash>/ledger.json (or $PRODGATE_HOME) so no repo i
   hot                         -> JSON list of machine ids with bugs 3 rounds running
   strict                      -> JSON list of finding kinds that are mostly refuted here (noise budget)
   record-round <file.json>    -> {sha, scope:[files], machines:[ids], confirmed:[{key, machine, kind}],
-                                  rejected:[{key, kind}], not_reproduced:[{key, kind}], fixed:int}
+                                  rejected:[{key, kind}], not_reproduced:[{key, kind}], duplicates:[{key}], fixed:int}
   status                      -> one-screen summary
 """
 
@@ -104,7 +104,7 @@ def main(argv: list[str]) -> None:
         for f in r.get("scope", []):
             d["reviewed"][f] = r["sha"]
         good, bad = r.get("confirmed", []), r.get("rejected", []) + r.get("not_reproduced", [])
-        d["seen"] = sorted(set(d["seen"]) | {c["key"] for c in good + bad})
+        d["seen"] = sorted(set(d["seen"]) | {c["key"] for c in good + bad + r.get("duplicates", [])})
         for c, is_bad in [(c, False) for c in good] + [(c, True) for c in bad]:
             k = d["kinds"].setdefault(c.get("kind") or "other", {"n": 0, "bad": 0})
             k["n"] += 1

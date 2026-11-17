@@ -187,7 +187,7 @@ if (A.mode === 'map') {
 // ---------- round: hunt -> verify -> (prove | design + fix) ----------
 const scope = A.scope || []
 const machines = A.machines || []
-const empty = { confirmed: [], unproven: [], rejected: [], fix_results: [], design: [], not_covered: [] }
+const empty = { confirmed: [], unproven: [], rejected: [], duplicates: [], fix_results: [], design: [], not_covered: [] }
 if (!scope.length) return { ...empty, note: 'empty scope' }
 
 const inScope = new Set(scope)
@@ -195,14 +195,16 @@ const touching = machines.filter(m => (m.files || []).some(f => inScope.has(f)))
 const covered = new Set(touching.flatMap(m => m.files || []))
 const loose = scope.filter(f => !covered.has(f))
 const MAX_HUNTERS = A.maxHunters || 8
+// hunters scale with the scope (about 8 files each): a small diff gets one hunter, not the maximum
+const HUNTERS = Math.min(MAX_HUNTERS, Math.max(1, Math.ceil(scope.length / 8)))
 // risk-tiered depth: high-risk machines get their own hunter on the strong model;
 // low-risk ones are packed together and may run on a lighter model
 const rank = { high: 0, medium: 1, low: 2 }
 const units = [
   ...touching.sort((a, b) => rank[a.risk || 'medium'] - rank[b.risk || 'medium']).map(m => ({ machines: [m], files: m.files || [], risk: m.risk || 'medium' })),
-  ...Array.from({ length: Math.ceil(loose.length / 40) }, (_, i) => ({ machines: [], files: loose.slice(i * 40, i * 40 + 40), risk: 'medium' })),
+  ...Array.from({ length: Math.ceil(loose.length / 8) }, (_, i) => ({ machines: [], files: loose.slice(i * 8, i * 8 + 8), risk: 'medium' })),
 ]
-const per = Math.max(1, Math.ceil(units.length / MAX_HUNTERS))
+const per = Math.max(1, Math.ceil(units.length / HUNTERS))
 const groups = []
 for (let i = 0; i < units.length; i += per) {
   const g = units.slice(i, i + per)
@@ -244,15 +246,25 @@ const hunted = await parallel(
 const notCovered = hunted.filter(Boolean).flatMap(r => r.not_covered || [])
 const all = hunted.filter(Boolean).flatMap(r => r.findings)
 const fresh = []
+const duplicates = []
 const keys = new Set()
+// the same bug from two hunters in different words: same file and kind, and the same function
+// (when both name one) or within 5 lines (when they don't)
+const sameBug = (a, b) =>
+  a.file === b.file &&
+  a.kind === b.kind &&
+  (a.function && b.function ? a.function === b.function && Math.abs((a.line || 0) - (b.line || 0)) <= 30 : Math.abs((a.line || 0) - (b.line || 0)) <= 5)
 for (const f of all) {
   const k = keyOf(f)
   if (seen.has(k) || keys.has(k)) continue
   keys.add(k)
-  fresh.push({ ...f, key: k })
+  const twin = fresh.find(g => sameBug(g, f))
+  if (twin) duplicates.push({ key: k, of: twin.key })
+  else fresh.push({ ...f, key: k })
 }
+if (duplicates.length) log(`🧬 ${duplicates.length} near-duplicates merged before checking`)
 log(`🔎 ${all.length} reported · ✨ ${fresh.length} new · ♻️ ${all.length - fresh.length} already seen`)
-if (!fresh.length) return { ...empty, not_covered: notCovered }
+if (!fresh.length) return { ...empty, duplicates, not_covered: notCovered }
 
 // checkers work per group of files, so each file is read once for all of its findings
 const chunk = (g, n) => Array.from({ length: Math.ceil(g.length / n) }, (_, i) => g.slice(i * n, i * n + n))
@@ -284,7 +296,7 @@ if (A.fix === false) {
   const confirmed = fresh.filter(f => kept.has(out.get(f.key)?.outcome)).map(f => ({ ...f, proof: out.get(f.key).outcome, test: out.get(f.key).test, evidence: out.get(f.key).evidence }))
   const rejected = fresh.filter(f => !kept.has(out.get(f.key)?.outcome)).map(f => ({ key: f.key, kind: f.kind, outcome: out.get(f.key)?.outcome || 'unchecked', evidence: out.get(f.key)?.evidence }))
   log(`🧪 ✅ ${confirmed.filter(f => f.proof === 'reproduced').length} proven by a failing test · 🔍 ${confirmed.filter(f => f.proof !== 'reproduced').length} traced, no harness · 🗑️ ${rejected.length} dropped`)
-  return { ...empty, confirmed, rejected, not_covered: notCovered }
+  return { ...empty, confirmed, rejected, duplicates, not_covered: notCovered }
 }
 
 // a verifier kills a finding only by quoting the code that makes it impossible;
@@ -316,7 +328,7 @@ const unproven = fresh.filter(f => verdictOf(f) === 'unproven')
 const rejected = fresh.filter(f => verdictOf(f) === 'refuted').map(f => ({ key: f.key, kind: f.kind, evidence: vmap.get(f.key)?.evidence }))
 log(`⚖️ ✅ ${confirmed.length} confirmed · 🟡 ${unproven.length} unproven, sent to a test · ❌ ${rejected.length} refuted with quoted code`)
 const live = [...confirmed, ...unproven]
-if (!live.length) return { ...empty, rejected, not_covered: notCovered }
+if (!live.length) return { ...empty, rejected, duplicates, not_covered: notCovered }
 
 // machines that keep breaking get a design step; their findings wait for it
 const hot = new Set(A.hot || [])
@@ -365,4 +377,4 @@ const results = fixed.filter(Boolean).flatMap(r => r.results)
 const accepted = r => r.status === 'fixed' && r.failed_before && (r.passes_after || 0) >= 3 && r.fails_without_fix
 const fixResults = results.map(r => (r.status === 'fixed' && !accepted(r) ? { ...r, status: 'unchecked' } : r))
 log(`🛠️ ✅ ${fixResults.filter(r => r.status === 'fixed').length} fixed with full evidence · ⚠️ ${fixResults.filter(r => r.status === 'unchecked').length} unchecked · 🚫 ${fixResults.filter(r => r.status === 'not_reproduced').length} not reproduced · 🧭 ${design.length} redesigns first`)
-return { ...empty, confirmed, unproven, rejected, fix_results: fixResults, design, held_for_design: live.filter(f => hotHit.includes(f.machine)), not_covered: notCovered }
+return { ...empty, confirmed, unproven, rejected, duplicates, fix_results: fixResults, design, held_for_design: live.filter(f => hotHit.includes(f.machine)), not_covered: notCovered }

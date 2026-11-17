@@ -89,3 +89,26 @@ test('caveman and ponytail at ultra are required in every agent, even with a cus
     assert.match(c.prompt, /HELLO/, c.label)
   }
 })
+
+test('hunters scale with the scope: a small diff gets one hunter, not the maximum', async () => {
+  const machines = [1, 2, 3, 4].map(i => ({ id: `m${i}`, name: `m${i}`, files: ['a.py'], states: [], transitions: [], risk: 'high' }))
+  const { calls } = await run({ ...base, scope: ['a.py', 'b.py'], machines, fix: false }, label => (label.includes('hunt ') ? { findings: [] } : null))
+  assert.equal(calls.filter(c => c.label.includes('hunt ')).length, 1)
+  const big = Array.from({ length: 40 }, (_, i) => `f${i}.py`)
+  const r2 = await run({ ...base, scope: big, machines: [], fix: false }, label => (label.includes('hunt ') ? { findings: [] } : null))
+  assert.equal(r2.calls.filter(c => c.label.includes('hunt ')).length, 5, '8 files per hunter')
+})
+
+test('near-duplicate findings from different hunters are merged before anything is proven', async () => {
+  const fake = label => {
+    if (label.includes('hunt ')) return { findings: [
+      finding('a.py', 54, 'Diff dropped the guarded close so two finishers both queue the callback', { function: 'on_job_finished' }),
+      finding('a.py', 56, 'Batch close is a plain ORM write and the callback is queued twice', { function: 'on_job_finished' }),
+      finding('a.py', 120, 'Different bug far away', { function: 'other' }),
+    ] }
+    if (label.includes('prove ')) return { results: [] }
+  }
+  const { calls } = await run({ ...base, fix: false }, fake)
+  const proved = JSON.parse(calls.find(c => c.label.includes('prove ')).prompt.split('Bugs:\n')[1])
+  assert.equal(proved.length, 2)
+})

@@ -88,46 +88,38 @@ if (A.mode === 'oneshot') {
     }),
   )
 } else if (A.mode === 'judge') {
+  // the judge reads its inputs from files (args.pairFiles, args.realFiles), so big runs stay small here
   phase('Judge')
-  // 1) does each candidate pair describe the same mechanism? (text only, cheap)
   const SAME = {
     type: 'object',
     properties: { pairs: { type: 'array', items: { type: 'object', properties: { id: { type: 'integer' }, same: { type: 'boolean' } }, required: ['id', 'same'] } } },
     required: ['pairs'],
   }
-  const pairs = A.pairs || []
-  const batches = Array.from({ length: Math.ceil(pairs.length / 60) }, (_, i) => pairs.slice(i * 60, i * 60 + 60))
   const same = (
     await parallel(
-      batches.map((b, i) => () =>
+      (A.pairFiles || []).map((file, i) => () =>
         agent(
-          'For each pair, say whether the REPORTED finding describes the same bug mechanism as the KNOWN bug (same wrong behaviour from the same cause; wording may differ). Be strict: same file but a different cause is not the same.\n' +
-            JSON.stringify(b.map(p => ({ id: p.id, reported: p.finding_text, known: p.bug_text }))),
-          { label: `judge:pairs:${i + 1}`, phase: 'Judge', schema: SAME, model: 'sonnet', effort: 'low' },
+          `Read the JSON file ${file}: a list of {id, reported, known}. For each, say whether the REPORTED finding describes the same bug mechanism as the KNOWN bug (same wrong behaviour from the same cause; wording may differ). Be strict: same area but a different cause is not the same. Return every id.`,
+          { label: `judge:same:${i + 1}`, phase: 'Judge', schema: SAME, model: 'sonnet', effort: 'low' },
         ),
       ),
     )
   )
     .filter(Boolean)
     .flatMap(r => r.pairs)
-  // 2) findings that match nothing in the key: is any of them a real bug? A test decides.
   const REAL = {
     type: 'object',
     properties: { results: { type: 'array', items: { type: 'object', properties: { id: { type: 'integer' }, real: { type: 'boolean' }, evidence: { type: 'string' } }, required: ['id', 'real', 'evidence'] } } },
     required: ['results'],
   }
-  const byApp = {}
-  for (const u of A.unmatched || []) (byApp[u.app] ||= []).push(u)
   const real = (
     await parallel(
-      Object.entries(byApp).map(([name, list]) => () => {
-        const app = A.apps.find(a => a.name === name)
-        return agent(
-          `Repo: ${app.path}. Do not edit the repo. Each item is a bug someone reported. Decide if it is a REAL bug: real=true only if you write a small test in ${A.scratch}/judge-${name}/ (outside the repo) that fails because of it, and run it. Otherwise real=false. Evidence = the failing assertion, or why it is not a bug. Delete the folder when done.\n` +
-            JSON.stringify(list.map(u => ({ id: u.id, file: u.file, line: u.line, bug: u.bug, repro: u.repro }))),
-          { label: `judge:real:${name}`, phase: 'Judge', schema: REAL, model: 'sonnet' },
-        )
-      }),
+      (A.realFiles || []).map(rf => () =>
+        agent(
+          `Repo: ${rf.repo}. Do not edit the repo. Read the JSON file ${rf.file}: bugs someone reported in this repo, as {id, file, line, bug, repro}. Decide for each whether it is a REAL bug: real=true only if you write a small test in ${A.scratch}/judge-${rf.app}/ (outside the repo) that fails because of it, and run it. Otherwise real=false. Evidence = the failing assertion, or why it is not a bug. Return every id. Delete the folder when done.`,
+          { label: `judge:real:${rf.app}`, phase: 'Judge', schema: REAL, model: 'sonnet' },
+        ),
+      ),
     )
   )
     .filter(Boolean)

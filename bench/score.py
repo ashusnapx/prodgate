@@ -99,6 +99,14 @@ def main(argv: list[str]) -> None:
         return
     judged = json.loads(Path(argv[3]).read_text()) if len(argv) > 3 else None
     adjudicated = json.loads(Path(argv[4]).read_text()) if len(argv) > 4 else None
+    # judge files from collect.py are keyed by mode, then app
+    if judged is not None and run["mode"] in judged:
+        judged = judged[run["mode"]]
+    if adjudicated is not None:
+        adjudicated = adjudicated.get(run["mode"], {}) if any(k in adjudicated for k in ("oneshot", "prompt", "prodgate")) else adjudicated
+    if run["mode"].startswith("recheck"):
+        global TRUTH
+        TRUTH = TRUTH / "regressions"
     per = {app: score(app, a["findings"], judged, adjudicated) for app, a in run["apps"].items()}
     seeded = sum(s["seeded"] for s in per.values())
     found = sum(s["found"] for s in per.values())
