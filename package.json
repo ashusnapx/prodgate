@@ -1,0 +1,16 @@
+{
+  "name": "@ashusnapx/prodgate",
+  "version": "1.0.0",
+  "description": "QA pipeline for Claude Code: AI agents find race conditions, stuck states and state-machine bugs, prove each with a failing test, and fix them until a round is clean.",
+  "bin": { "prodgate": "cli/install.mjs" },
+  "type": "module",
+  "files": ["cli/install.mjs", "skills/prodgate", "README.md", "LICENSE"],
+  "engines": { "node": ">=18" },
+  "keywords": ["claude-code", "claude-code-plugin", "claude-skills", "qa", "qa-pipeline", "testing", "bug-detection", "race-conditions", "state-machine", "ai-code-review", "ai-agents"],
+  "repository": { "type": "git", "url": "git+https://github.com/ashusnapx/prodgate.git" },
+  "homepage": "https://github.com/ashusnapx/prodgate#readme",
+  "bugs": "https://github.com/ashusnapx/prodgate/issues",
+  "author": "ashusnapx",
+  "license": "MIT",
+  "publishConfig": { "access": "public" }
+}
