@@ -74,6 +74,37 @@ prodgate does not run without the [caveman](https://github.com/JuliusBrussee/cav
 
 **4. Report** (once, at the end): a short table of rounds, confirmed and fixed per round, the gate results, what remains open, and the commits.
 
+## How a run looks
+
+Show progress with these exact shapes, so every run reads at a glance. Use the icons as written; they are the colour.
+
+Start of each round, one block:
+
+```text
+◆ prodgate · round 2 · repo@1a2b3c4
+  🎯 scope   14 changed · 9 callers · 0 never reviewed · 3 machines (🔴 2 · 🟡 1)
+  ♻️ skipped 312 files unchanged since their last check
+```
+
+After each round, a scoreboard table:
+
+| Round | 🎯 Scope | 🔎 Found | ⚖️ Refuted | 🧪 Proven | 🛠️ Fixed | Status |
+|---|---|---|---|---|---|---|
+| 1 | 23 machines | 41 | 12 | 29 | 29 | 🟡 next round |
+| 2 | 23 files | 6 | 1 | 5 | 5 | 🟡 next round |
+| 3 | 4 files | 0 | 0 | 0 | 0 | 🟢 clean |
+
+The production gate, one row per item:
+
+| Gate | Result |
+|---|---|
+| ✅ Suites | 412 passed |
+| ✅ Typecheck · lint · build | clean |
+| ✅ Fresh-eyes review | 0 open |
+| ⏭️ Dependencies | pip-audit not installed |
+
+End with one line: `🚀 prodgate: ready to ship` (every gate item ✅), or `⛔ prodgate: not ready` plus the open items. Use 🔴 🟡 🟢 for risk and status, ✅ ❌ ⚠️ ⏭️ for results, and nothing else decorative.
+
 ## Token rules
 
 - Every agent starts with caveman `ultra` and ponytail `ultra` (required, no opt-out). It reads by line range after `grep -n`, never reads a file twice, and answers with the schema only.

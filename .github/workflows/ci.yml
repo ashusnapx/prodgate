@@ -1,0 +1,27 @@
+name: ci
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Workflow control flow (fake agents)
+        run: node --test tests/
+      - name: Ledger and scorer
+        run: python -m unittest discover -s tests -v
+      - name: Shell syntax
+        run: bash -n skills/prodgate/bin/qa-run bench/prepare.sh
+      - name: Answer keys are valid
+        run: python -c "import json,glob; [json.load(open(f)) for f in glob.glob('bench/truth/*.json')]"
+      - name: Fixture suites pass with the seeded bugs in place
+        run: |
+          python -m venv bench/.venv && bench/.venv/bin/pip install -q -r bench/requirements.txt
+          for d in bench/fixtures/*/; do (cd "$d" && bash run_tests.sh) || exit 1; done

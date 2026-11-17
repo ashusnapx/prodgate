@@ -46,13 +46,15 @@ trap 'rm -f "$out"' EXIT
 locked "$@" >"$out" 2>&1
 code=$?
 n=$(wc -l <"$out" | tr -d ' ')
+# colour only for a person at a terminal; agents get plain text (no extra tokens)
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then OK=$'\e[38;2;52;211;153m' BAD=$'\e[38;2;248;113;113m' X=$'\e[0m'; else OK= BAD= X=; fi
 if [ "$code" -eq 0 ]; then
   summary=$(grep -iE '[0-9]+ (passed|failed|tests?)|^# (pass|fail)|^ok ' "$out" | tail -2 | tr '\n' ' ' | cut -c1-200)
-  echo "qa-run: PASS ($n lines hidden, QA_RAW=1 shows them) $summary"
+  echo "qa-run: ${OK}PASS${X} ($n lines hidden, QA_RAW=1 shows them) $summary"
 else
   grep -nE 'FAIL|Error|assert|Traceback|not ok|✗|✖' "$out" | head -30
   echo "--- last 40 of $n lines ---"
   tail -40 "$out"
-  echo "qa-run: FAIL (exit $code)"
+  echo "qa-run: ${BAD}FAIL${X} (exit $code)"
 fi
 exit "$code"

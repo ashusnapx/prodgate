@@ -3,12 +3,12 @@ export const meta = {
   description: 'prodgate QA round: map state machines, or hunt a frozen commit, check each finding against the code, prove it with a failing test, and fix test-first',
   whenToUse: 'Called by the prodgate skill with args {mode: "map"|"round", repo, sha, ...}; never on code that is still changing',
   phases: [
-    { title: 'Map', detail: 'inventory the implicit state machines per cluster' },
-    { title: 'Hunt', detail: 'find bugs in the scope on the frozen commit' },
-    { title: 'Verify', detail: 'refute with cited code, confirm, or mark unproven' },
-    { title: 'Prove', detail: 'report-only runs: a failing test or it is dropped' },
-    { title: 'Design', detail: 'simplify machines that keep breaking' },
-    { title: 'Fix', detail: 'test-first, one owner per file group, checked fixes only' },
+    { title: '🗺️ Map', detail: 'inventory the implicit state machines per cluster' },
+    { title: '🔎 Hunt', detail: 'find bugs in the scope on the frozen commit' },
+    { title: '⚖️ Check', detail: 'refute with cited code, confirm, or mark unproven' },
+    { title: '🧪 Prove', detail: 'report-only runs: a failing test or it is dropped' },
+    { title: '🧭 Design', detail: 'simplify machines that keep breaking' },
+    { title: '🛠️ Fix', detail: 'test-first, one owner per file group, checked fixes only' },
   ],
 }
 
@@ -167,7 +167,7 @@ const filesOf = g => [...new Set(g.flatMap(f => [f.file, ...(f.files || [])]))]
 
 // ---------- map: one inventory pass per cluster ----------
 if (A.mode === 'map') {
-  phase('Map')
+  phase('🗺️ Map')
   const res = await parallel(
     (A.clusters || []).map(c => () =>
       agent(
@@ -175,12 +175,12 @@ if (A.mode === 'map') {
           'A state machine is anything with states and moves between them: status columns, boolean flags, nullable timestamps, job or queue states, sessions, UI modes, wizard steps, polling loops, cached screens, locks.\n' +
           `For each one return: id (short kebab, unique, prefixed "${c.name}-"), name, files (repo-relative paths that read or write its state), states, transitions ("from -> to: trigger, where"), guards (where each transition is checked), actors (who can act at once: users, tabs, jobs, webhooks, admins), and risk: high if two actors can act at once or it touches money, auth, tenancy or deletion; low if it is single-actor UI state; otherwise medium.\n` +
           'Mapping only, no bugs. Use grep and targeted reads.',
-        opt({ label: `map:${c.name}`, phase: 'Map', schema: MACHINES }, M.map),
+        opt({ label: `🗺️ map · ${c.name}`, phase: '🗺️ Map', schema: MACHINES }, M.map),
       ),
     ),
   )
   const machines = res.filter(Boolean).flatMap(r => r.machines)
-  log(`${machines.length} state machines mapped across ${(A.clusters || []).length} clusters`)
+  log(`🗺️  ${machines.length} state machines mapped across ${(A.clusters || []).length} clusters · 🔴 ${machines.filter(m => m.risk === 'high').length} high risk · 🟡 ${machines.filter(m => m.risk === 'medium').length} medium · 🟢 ${machines.filter(m => m.risk === 'low').length} low`)
   return { machines }
 }
 
@@ -215,7 +215,7 @@ const strict = (A.strict || []).length
   : ''
 const diffNote = A.base && A.base !== A.sha ? `Changed since the last check: \`git diff ${A.base}..${A.sha} -- <files>\`. Review those changes first, then the rest of each machine.\n` : ''
 
-phase('Hunt')
+phase('🔎 Hunt')
 const hunted = await parallel(
   groups.map((g, i) => () =>
     agent(
@@ -237,7 +237,7 @@ const hunted = await parallel(
         'Each bug must be reachable from the UI, the API, a job or a CLI. No style, perf-only or theoretical items.\n' +
         `Do not report these already-seen issues again:\n${seenHint || '(none)'}\n` +
         'Per bug: `function` = the function that holds the bug, `files` = every file the fix would touch. List files you did not read fully in not_covered.',
-      opt({ label: `hunt:${i + 1}/${groups.length}`, phase: 'Hunt', schema: FINDINGS }, g.light ? M.light || M.hunt : M.hunt),
+      opt({ label: `🔎 hunt ${i + 1}/${groups.length} · ${(g.machines[0] || {}).name || g.files[0] || 'files'}`, phase: '🔎 Hunt', schema: FINDINGS }, g.light ? M.light || M.hunt : M.hunt),
     ),
   ),
 )
@@ -251,7 +251,7 @@ for (const f of all) {
   keys.add(k)
   fresh.push({ ...f, key: k })
 }
-log(`${all.length} reported, ${fresh.length} new after de-duplication`)
+log(`🔎 ${all.length} reported · ✨ ${fresh.length} new · ♻️ ${all.length - fresh.length} already seen`)
 if (!fresh.length) return { ...empty, not_covered: notCovered }
 
 // checkers work per group of files, so each file is read once for all of its findings
@@ -261,7 +261,7 @@ const REFUTE = '- refuted: only if you can quote the code (file:line) that makes
 
 // ---------- report-only runs: refute with quoted code, or prove with a failing test ----------
 if (A.fix === false) {
-  phase('Prove')
+  phase('🧪 Prove')
   const proved = (
     await parallel(
       checkGroups.map((g, i) => () =>
@@ -272,7 +272,7 @@ if (A.fix === false) {
             '- no_harness_traced: the code cannot run in a test here, but you traced the repro step by step and nothing stops it (quote the lines).\n' +
             '- no_harness_unsure: none of the above.\n' +
             `Evidence = the quoted lines or the failing assertion. Delete the folder when done. Repo commands: ${CMDS}.\nBugs:\n${JSON.stringify(g.map(slim))}`,
-          opt({ label: `prove:${i + 1}/${checkGroups.length}`, phase: 'Prove', schema: PROVED }, M.prove),
+          opt({ label: `🧪 prove ${i + 1}/${checkGroups.length} · ${g[0].file.split('/').pop()}`, phase: '🧪 Prove', schema: PROVED }, M.prove),
         ),
       ),
     )
@@ -283,13 +283,13 @@ if (A.fix === false) {
   const kept = new Set(['reproduced', 'no_harness_traced'])
   const confirmed = fresh.filter(f => kept.has(out.get(f.key)?.outcome)).map(f => ({ ...f, proof: out.get(f.key).outcome, test: out.get(f.key).test, evidence: out.get(f.key).evidence }))
   const rejected = fresh.filter(f => !kept.has(out.get(f.key)?.outcome)).map(f => ({ key: f.key, kind: f.kind, outcome: out.get(f.key)?.outcome || 'unchecked', evidence: out.get(f.key)?.evidence }))
-  log(`${confirmed.length} reported (${confirmed.filter(f => f.proof === 'reproduced').length} with a failing test), ${rejected.length} dropped`)
+  log(`🧪 ✅ ${confirmed.filter(f => f.proof === 'reproduced').length} proven by a failing test · 🔍 ${confirmed.filter(f => f.proof !== 'reproduced').length} traced, no harness · 🗑️ ${rejected.length} dropped`)
   return { ...empty, confirmed, rejected, not_covered: notCovered }
 }
 
 // a verifier kills a finding only by quoting the code that makes it impossible;
 // anything it cannot settle is "unproven" and goes to the fixer's failing test, never to the bin
-phase('Verify')
+phase('⚖️ Check')
 const verdicts = (
   await parallel(
     checkGroups.map((g, i) => () =>
@@ -298,7 +298,7 @@ const verdicts = (
           '- confirmed: you traced the repro step by step and nothing stops it; quote the lines.\n' +
           '- unproven: anything else (unsure, depends on timing or config). Unproven bugs go to a test, so never guess refuted.\n' +
           `Put the quoted lines in evidence.\nBugs:\n${JSON.stringify(g.map(f => ({ key: f.key, kind: f.kind, file: f.file, line: f.line, bug: f.bug, repro: f.repro, why: f.why })))}`,
-        opt({ label: `verify:${i + 1}/${checkGroups.length}`, phase: 'Verify', schema: VERDICTS, effort: 'medium' }, M.verify),
+        opt({ label: `⚖️ check ${i + 1}/${checkGroups.length} · ${g[0].file.split('/').pop()}`, phase: '⚖️ Check', schema: VERDICTS, effort: 'medium' }, M.verify),
       ),
     ),
   )
@@ -314,27 +314,27 @@ const verdictOf = f => {
 const confirmed = fresh.filter(f => verdictOf(f) === 'confirmed').map(f => ({ ...f, evidence: vmap.get(f.key)?.evidence }))
 const unproven = fresh.filter(f => verdictOf(f) === 'unproven')
 const rejected = fresh.filter(f => verdictOf(f) === 'refuted').map(f => ({ key: f.key, kind: f.kind, evidence: vmap.get(f.key)?.evidence }))
-log(`${confirmed.length} confirmed, ${unproven.length} unproven, ${rejected.length} refuted with quoted code`)
+log(`⚖️ ✅ ${confirmed.length} confirmed · 🟡 ${unproven.length} unproven, sent to a test · ❌ ${rejected.length} refuted with quoted code`)
 const live = [...confirmed, ...unproven]
 if (!live.length) return { ...empty, rejected, not_covered: notCovered }
 
 // machines that keep breaking get a design step; their findings wait for it
 const hot = new Set(A.hot || [])
 const hotHit = [...new Set(live.filter(f => hot.has(f.machine)).map(f => f.machine))]
-phase('Design')
+phase('🧭 Design')
 const DA = A.designAgents || {}
 const design = (
   await parallel(
     hotHit.map(m => async () => {
       const brief = `${FROZEN}\n\nState machine "${m}" has had confirmed bugs in 3 or more rounds in a row. This round's:\n${JSON.stringify(live.filter(f => f.machine === m).map(slim))}\nCritique its design as code (not a document): what structure keeps producing these bugs, and what is the smallest change that removes the whole class? 8 lines or fewer.`
       const [hostile, simple] = await parallel([
-        () => agent(`${PRE}You are a hostile architecture critic. Read-only.\n${brief}`, opt({ label: `design:${m}:critic`, phase: 'Design', ...(DA.critic ? { agentType: DA.critic } : {}) }, M.design)),
-        () => agent(`${PRE}You are a simplicity reviewer (YAGNI: delete, merge, drop rules). Read-only.\n${brief}`, opt({ label: `design:${m}:simplicity`, phase: 'Design', ...(DA.simplicity ? { agentType: DA.simplicity } : {}) }, M.design)),
+        () => agent(`${PRE}You are a hostile architecture critic. Read-only.\n${brief}`, opt({ label: `🧭 design · ${m} · critic`, phase: '🧭 Design', ...(DA.critic ? { agentType: DA.critic } : {}) }, M.design)),
+        () => agent(`${PRE}You are a simplicity reviewer (YAGNI: delete, merge, drop rules). Read-only.\n${brief}`, opt({ label: `🧭 design · ${m} · simplicity`, phase: '🧭 Design', ...(DA.simplicity ? { agentType: DA.simplicity } : {}) }, M.design)),
       ])
       return agent(
         `${PRE}${FROZEN}\n\nTwo reviews of state machine "${m}":\nCRITIC: ${hostile}\nSIMPLICITY: ${simple}\n` +
           'Merge them into ONE smallest redesign that removes the class of bug, preferring deletion and consolidation over new code. Give the plan in 5 lines or fewer, plus the files it touches.',
-        opt({ label: `design:${m}:plan`, phase: 'Design', schema: DESIGN }, M.design),
+        opt({ label: `🧭 design · ${m} · plan`, phase: '🧭 Design', schema: DESIGN }, M.design),
       )
     }),
   )
@@ -343,7 +343,7 @@ const design = (
 const toFix = live.filter(f => !hotHit.includes(f.machine))
 const fixGroups = byFiles(toFix)
 
-phase('Fix')
+phase('🛠️ Fix')
 const fixed = await parallel(
   fixGroups.map((g, i) => () =>
     agent(
@@ -356,7 +356,7 @@ const fixed = await parallel(
         'If step 1 cannot fail, leave the code alone and mark it not_reproduced; that is a valid, useful answer.\n' +
         `Run EVERY test command through ${RUN} (it queues tests and waits for dev servers), targeted files only, never the full suite. Repo commands: ${CMDS}. Lint and format the changed files.\n` +
         `Bugs:\n${JSON.stringify(g.map(slim))}`,
-      opt({ label: `fix:${i + 1}/${fixGroups.length}`, phase: 'Fix', schema: FIXED }, M.fix),
+      opt({ label: `🛠️ fix ${i + 1}/${fixGroups.length} · ${g[0].file.split('/').pop()}`, phase: '🛠️ Fix', schema: FIXED }, M.fix),
     ),
   ),
 )
@@ -364,5 +364,5 @@ const results = fixed.filter(Boolean).flatMap(r => r.results)
 // the acceptance check: a "fixed" claim without the evidence is returned for a human look
 const accepted = r => r.status === 'fixed' && r.failed_before && (r.passes_after || 0) >= 3 && r.fails_without_fix
 const fixResults = results.map(r => (r.status === 'fixed' && !accepted(r) ? { ...r, status: 'unchecked' } : r))
-log(`${fixResults.filter(r => r.status === 'fixed').length} fixed with full evidence, ${fixResults.filter(r => r.status === 'unchecked').length} unchecked, ${fixResults.filter(r => r.status === 'not_reproduced').length} not reproduced, ${design.length} design plans waiting`)
+log(`🛠️ ✅ ${fixResults.filter(r => r.status === 'fixed').length} fixed with full evidence · ⚠️ ${fixResults.filter(r => r.status === 'unchecked').length} unchecked · 🚫 ${fixResults.filter(r => r.status === 'not_reproduced').length} not reproduced · 🧭 ${design.length} redesigns first`)
 return { ...empty, confirmed, unproven, rejected, fix_results: fixResults, design, held_for_design: live.filter(f => hotHit.includes(f.machine)), not_covered: notCovered }

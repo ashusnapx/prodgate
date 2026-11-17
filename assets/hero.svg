@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420" role="img" aria-labelledby="t d">
+  <title id="t">prodgate</title>
+  <desc id="d">The QA pipeline for Claude Code: map, hunt, check, prove, fix, gate.</desc>
+  <defs>
+    <linearGradient id="title" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#A78BFA"/>
+      <stop offset="0.35" stop-color="#60A5FA"/>
+      <stop offset="0.7" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#34D399"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="0.18" cy="0.1" r="0.55">
+      <stop offset="0" stop-color="#7C3AED" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#7C3AED" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0.85" cy="0.95" r="0.6">
+      <stop offset="0" stop-color="#0891B2" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#0891B2" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#FFFFFF" stroke-opacity="0.045" stroke-width="1"/>
+    </pattern>
+    <clipPath id="card"><rect width="1200" height="420" rx="28"/></clipPath>
+  </defs>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif; }
+    .chip { fill-opacity: 0.10; animation: lit 6s ease-in-out infinite; }
+    .s1 { animation-delay: 0s; } .s2 { animation-delay: 1s; } .s3 { animation-delay: 2s; }
+    .s4 { animation-delay: 3s; } .s5 { animation-delay: 4s; } .s6 { animation-delay: 5s; }
+    @keyframes lit { 0%, 30%, 100% { fill-opacity: 0.10; } 10% { fill-opacity: 0.42; } }
+    @media (prefers-reduced-motion: reduce) { .chip { animation: none; fill-opacity: 0.18; } }
+  </style>
+  <g clip-path="url(#card)">
+    <rect width="1200" height="420" fill="#0B1020"/>
+    <rect width="1200" height="420" fill="url(#grid)"/>
+    <rect width="1200" height="420" fill="url(#glowA)"/>
+    <rect width="1200" height="420" fill="url(#glowB)"/>
+  </g>
+  <rect x="0.75" y="0.75" width="1198.5" height="418.5" rx="27.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.08"/>
+
+  <text x="600" y="148" text-anchor="middle" font-size="104" font-weight="800" letter-spacing="-3" fill="url(#title)">prodgate</text>
+  <text x="600" y="200" text-anchor="middle" font-size="27" font-weight="600" fill="#E2E8F0">Hunt state bugs until zero. Prove every one with a failing test.</text>
+  <text x="600" y="236" text-anchor="middle" font-size="17" fill="#94A3B8">The QA pipeline for Claude Code · races · stuck states · stale writes · tenant leaks · lost UI state</text>
+
+  <g font-size="20" font-weight="700" text-anchor="middle">
+    <rect class="chip s1" x="60" y="282" width="150" height="66" rx="16" fill="#8B5CF6" stroke="#8B5CF6" stroke-width="1.5"/>
+    <text x="135" y="311" fill="#EDE9FE">Map</text>
+    <text x="135" y="333" font-size="12.5" font-weight="500" fill="#A5B4FC">state machines</text>
+
+    <rect class="chip s2" x="246" y="282" width="150" height="66" rx="16" fill="#3B82F6" stroke="#3B82F6" stroke-width="1.5"/>
+    <text x="321" y="311" fill="#DBEAFE">Hunt</text>
+    <text x="321" y="333" font-size="12.5" font-weight="500" fill="#93C5FD">frozen commit</text>
+
+    <rect class="chip s3" x="432" y="282" width="150" height="66" rx="16" fill="#06B6D4" stroke="#06B6D4" stroke-width="1.5"/>
+    <text x="507" y="311" fill="#CFFAFE">Check</text>
+    <text x="507" y="333" font-size="12.5" font-weight="500" fill="#67E8F9">quoted code only</text>
+
+    <rect class="chip s4" x="618" y="282" width="150" height="66" rx="16" fill="#14B8A6" stroke="#14B8A6" stroke-width="1.5"/>
+    <text x="693" y="311" fill="#CCFBF1">Prove</text>
+    <text x="693" y="333" font-size="12.5" font-weight="500" fill="#5EEAD4">failing test</text>
+
+    <rect class="chip s5" x="804" y="282" width="150" height="66" rx="16" fill="#F59E0B" stroke="#F59E0B" stroke-width="1.5"/>
+    <text x="879" y="311" fill="#FEF3C7">Fix</text>
+    <text x="879" y="333" font-size="12.5" font-weight="500" fill="#FCD34D">test-first, checked</text>
+
+    <rect class="chip s6" x="990" y="282" width="150" height="66" rx="16" fill="#22C55E" stroke="#22C55E" stroke-width="1.5"/>
+    <text x="1065" y="311" fill="#DCFCE7">Gate</text>
+    <text x="1065" y="333" font-size="12.5" font-weight="500" fill="#86EFAC">ready to ship</text>
+  </g>
+  <g fill="none" stroke="#64748B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M222 309l6 6-6 6"/><path d="M408 309l6 6-6 6"/><path d="M594 309l6 6-6 6"/>
+    <path d="M780 309l6 6-6 6"/><path d="M966 309l6 6-6 6"/>
+  </g>
+
+  <text x="600" y="394" text-anchor="middle" font-size="14.5" fill="#64748B">caveman + ponytail at ultra in every agent  ·  re-checks read only what changed  ·  unchanged code costs 0 tokens</text>
+</svg>

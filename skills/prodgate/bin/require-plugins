@@ -2,6 +2,8 @@
 # prodgate requires caveman and ponytail: every agent it runs loads both at ultra.
 # Exits 0 when both are installed (as Claude Code plugins or as skills), otherwise prints how to install them.
 home="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+# colour only for a person at a terminal
+if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then R=$'\e[38;2;248;113;113m' G=$'\e[38;2;52;211;153m' B=$'\e[1m' X=$'\e[0m'; else R= G= B= X=; fi
 has() {
   grep -q "\"$1@" "$home/plugins/installed_plugins.json" 2>/dev/null ||
     [ -f "$home/skills/$1/SKILL.md" ] || [ -f ".claude/skills/$1/SKILL.md" ]
@@ -10,8 +12,9 @@ missing=()
 has caveman || missing+=("caveman:  claude plugin marketplace add JuliusBrussee/caveman && claude plugin install caveman@caveman")
 has ponytail || missing+=("ponytail: claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail")
 if [ ${#missing[@]} -gt 0 ]; then
-  echo "prodgate needs these plugins (every agent runs them at ultra). Install, restart Claude Code, run again:" >&2
+  echo "${R}✗${X} ${B}prodgate needs these plugins${X} (every agent runs them at ultra). Install, restart Claude Code, run again:" >&2
   printf '  %s\n' "${missing[@]}" >&2
   exit 1
 fi
-echo "prodgate: caveman and ponytail found; every agent runs both at ultra"
+[ -t 1 ] && [ -z "${NO_COLOR:-}" ] && G1=$G X1=$X || G1= X1=
+echo "${G1}✓${X1} prodgate: caveman and ponytail found; every agent runs both at ultra"
