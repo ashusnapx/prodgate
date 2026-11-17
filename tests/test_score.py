@@ -48,5 +48,14 @@ class Score(unittest.TestCase):
         self.assertEqual(s["found"], 0)
 
 
+    def test_a_proven_different_bug_on_decoy_lines_is_real_not_a_decoy_hit(self):
+        findings = [
+            {"file": "app/queue.py", "line": 12, "bug": "claims the guarded update races"},  # decoy, unproven
+            {"file": "app/queue.py", "line": 15, "bug": "a different real bug on the same lines"},  # proven by a test
+        ]
+        s = self.score.score("demo", findings, {"demo": {}}, {"demo": {"0": False, "1": True}})
+        self.assertEqual((s["decoy_hits"], s["real_unseeded"], s["false_positives"]), (1, 1, 1))
+
+
 if __name__ == "__main__":
     unittest.main()

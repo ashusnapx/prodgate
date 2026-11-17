@@ -1,0 +1,71 @@
+{
+ "mode": "recheck-prodgate-v1",
+ "tokens": {
+  "agents": 7,
+  "input": 104,
+  "cache_write": 397049,
+  "cache_read": 3018626,
+  "output": 37587,
+  "total": 3453366,
+  "harness_subagent_tokens": 507376,
+  "wall_seconds": 231
+ },
+ "apps": {
+  "jobs-queue": {
+   "findings": [
+    {
+     "file": "app/services/batches.py",
+     "line": 54,
+     "function": "on_job_finished",
+     "bug": "Diff fef5c0e replaced the conditional `UPDATE batches ... WHERE status=open` plus `rowcount == 1` gate with a plain ORM write (`batch.status = final; batch.finished_at = utcnow()`). The ORM flush is `UPDATE ... WHERE id=?` with no status guard, and `_queue_callback` now runs every time.",
+     "repro": "Batch of 2 jobs with callback_url. Workers A and B complete J1 and J2 at the same moment (POST /worker/jobs/{id}/complete or Worker.run_once). Each complete_job commits, then on_job_finished runs in its own session. A reads the batch as open and counts 2/2, B does the same, A commits and B commits. Result: 2 batch.callback jobs, so the webhook fires twice. Variant: A takes its count snapshot, J2 is retried and then dies, B commits completed_with_errors, then A commits completed last. The batch ends up completed while a job is dead, and the two callbacks report conflicting status.",
+     "proof": "reproduced"
+    },
+    {
+     "file": "app/services/jobs.py",
+     "line": 74,
+     "function": "enqueue_job",
+     "bug": "`if key:` treats \"\" as no key and skips the lookup, but build_job still stores `idempotency_key=\"\"`, which is not NULL and so hits uq_jobs_tenant_idempotency_key. The schema allows \"\" (only max_length is set).",
+     "repro": "Tenant T sends POST /jobs {queue:q, kind:a, idempotency_key:\"\"}, which creates job 1 (201). Then POST /jobs {queue:q, kind:b, payload:{...}, idempotency_key:\"\"} gets an IntegrityError, a rollback and a refetch by key \"\", and returns job 1 with 200. Every later job sent with an empty key is dropped without notice and the caller gets someone else's job.",
+     "proof": "reproduced"
+    },
+    {
+     "file": "app/services/jobs.py",
+     "line": 65,
+     "function": "build_job",
+     "bug": "A client `run_after` with a UTC offset is parsed by pydantic as an aware datetime and stored as is. SQLAlchemy's SQLite DATETIME (the default DB) formats the wall-clock fields and drops tzinfo. claim_next_job then compares it with naive UTC `utcnow()`.",
+     "repro": "POST /jobs {queue:q, kind:k, run_after:\"2026-11-17T15:00:00+05:30\"}, meant as 09:30 UTC. It is stored as 15:00 and claimed 5.5 h late. A negative offset such as -08:00 makes it run 8 h early. The same applies to batch job specs.",
+     "proof": "reproduced"
+    },
+    {
+     "file": "app/services/batches.py",
+     "line": 54,
+     "function": "on_job_finished",
+     "bug": "Diff e5a3c48..fb56a83 dropped the compare-and-swap close (`update(Batch).where(Batch.status == OPEN)` + `rowcount == 1`). Now: `batch.status = final; batch.finished_at = utcnow(); if batch.callback_url: _queue_callback(...)`. The OPEN check at line 44 runs on a plain ORM read, with no lock and no recheck when the UPDATE runs.",
+     "repro": "1) Batch of 2 jobs with a callback_url. 2) Worker A calls POST /worker/jobs/1/complete while worker B calls /worker/jobs/2/complete. 3) Both commits land, then both sessions run db.get(Batch), see OPEN and count succeeded=2. 4) Both write status=completed and both add a batch.callback job. Result: 2 callback jobs, so the webhook fires twice. Same thing happens with a complete racing POST /worker/recover dead-lettering the last job, or with two /worker/recover calls at once.",
+     "proof": "reproduced"
+    }
+   ]
+  },
+  "ui-flows": {
+   "findings": [
+    {
+     "file": "src/flows/job-poller.ts",
+     "line": 58,
+     "function": "JobPoller.stop",
+     "bug": "stop() no longer bumps `this.generation` (removed in d7673f4..35e4b42), so a getJob already in flight when stop() runs still matches its generation: it writes `job`/`error`, fires onFinished, and for queued/running schedules a new timer, so polling restarts after stop.",
+     "repro": "setJob({id:'j1',status:'running'}); api.before delays getJob; poller.watch('j1'); poller.stop() (polling=false, timer null); release getJob -> generation 1 === 1 -> job set, setTimeout(check) scheduled -> poller keeps calling getJob every interval with polling=false; if the job then succeeds or fails, onFinished fires for a job the user stopped watching.",
+     "proof": "reproduced"
+    },
+    {
+     "file": "src/flows/job-poller.ts",
+     "line": 58,
+     "function": "JobPoller.stop",
+     "bug": "stop() no longer bumps `this.generation` (the `this.generation++;` line was removed in d7673f4..35e4b42). A getJob already in flight when stop() runs still passes the `generation !== this.generation` check at line 69/78, so it writes job/error and re-arms the timer at line 83.",
+     "repro": "1) watch('j1'). 2) While the first getJob('j1') is still pending, the page calls stop() (chip closed or user leaves). 3) getJob resolves with status 'running'. 4) The generation still matches, so job is written, a new timer is scheduled and polling restarts while `polling === false`. 5) The job later succeeds, so onFinished fires on a stopped poller. If getJob rejects instead, `error` is set after the stop.",
+     "proof": "reproduced"
+    }
+   ]
+  }
+ }
+}

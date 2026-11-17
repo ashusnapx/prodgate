@@ -62,17 +62,19 @@ def score(app: str, findings: list[dict], judged: dict | None, adjudicated: dict
             matched[p["bug"]] = p["finding"]
             used.add(p["finding"])
     dupes = {p["finding"] for p in pairs if p["finding"] not in used and p["bug"] in matched}
-    decoy = set()
-    for i, f in enumerate(findings):
-        if i in used or i in dupes:
-            continue
-        for d in t.get("decoys", []):
-            if norm(f.get("file", ""), app) == d["file"] and near(f, d["lines"], 3):
-                decoy.add(i)
-    rest = [i for i in range(len(findings)) if i not in used | dupes | decoy]
     adj = (adjudicated or {}).get(app, {})
+    # tests decide: a finding a separate test proved real counts as a real bug, even on decoy lines;
+    # an unproven finding on a decoy's lines is a decoy hit; any other unproven finding is a false positive
+    rest = [i for i in range(len(findings)) if i not in used | dupes]
     real_extra = [i for i in rest if adj.get(str(i)) is True]
-    false_pos = [i for i in rest if adj.get(str(i)) is not True]
+    decoy = set()
+    for i in rest:
+        if adj.get(str(i)) is True:
+            continue
+        f = findings[i]
+        if any(norm(f.get("file", ""), app) == d["file"] and near(f, d["lines"], 3) for d in t.get("decoys", [])):
+            decoy.add(i)
+    false_pos = [i for i in rest if adj.get(str(i)) is not True and i not in decoy]
     unique = len(findings) - len(dupes)
     return {
         "seeded": len(t["bugs"]),
@@ -86,7 +88,7 @@ def score(app: str, findings: list[dict], judged: dict | None, adjudicated: dict
         "false_positives": len(false_pos) + len(decoy),
         "unadjudicated": 0 if adjudicated is not None else len(rest),
         "precision": round((len(matched) + len(real_extra)) / unique, 3) if unique else None,
-        "by_class": {b["class"]: b["id"] in matched for b in t["bugs"]},
+        "by_class": [[b["class"], b["id"] in matched] for b in t["bugs"]],
     }
 
 
@@ -100,13 +102,14 @@ def main(argv: list[str]) -> None:
     judged = json.loads(Path(argv[3]).read_text()) if len(argv) > 3 else None
     adjudicated = json.loads(Path(argv[4]).read_text()) if len(argv) > 4 else None
     # judge files from collect.py are keyed by mode, then app
-    if judged is not None and run["mode"] in judged:
-        judged = judged[run["mode"]]
+    if judged is not None:
+        judged = judged.get(run["mode"])  # a mode the judge never saw is matched by location only (lenient)
     if adjudicated is not None:
         adjudicated = adjudicated.get(run["mode"], {}) if any(k in adjudicated for k in ("oneshot", "prompt", "prodgate")) else adjudicated
     if run["mode"].startswith("recheck"):
         global TRUTH
         TRUTH = TRUTH / "regressions"
+        run = {**run, "apps": {a: v for a, v in run["apps"].items() if (TRUTH / f"{a}.json").exists()}}
     per = {app: score(app, a["findings"], judged, adjudicated) for app, a in run["apps"].items()}
     seeded = sum(s["seeded"] for s in per.values())
     found = sum(s["found"] for s in per.values())

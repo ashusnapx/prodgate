@@ -1,0 +1,218 @@
+{
+ "oneshot": {
+  "auth-sessions": {
+   "4": true,
+   "5": true
+  },
+  "billing": {
+   "8": true,
+   "7": true
+  },
+  "documents": {
+   "2": true,
+   "7": true,
+   "8": true,
+   "9": true,
+   "10": true,
+   "11": true,
+   "12": true
+  },
+  "inventory-orders": {
+   "7": true,
+   "8": true,
+   "9": true,
+   "10": true
+  },
+  "jobs-queue": {
+   "3": true,
+   "6": true,
+   "9": true,
+   "11": true,
+   "12": true,
+   "10": false
+  },
+  "tenant-notes": {
+   "4": true,
+   "5": true,
+   "8": true,
+   "9": true,
+   "10": true,
+   "11": true
+  },
+  "ui-flows": {
+   "4": true,
+   "9": true,
+   "10": true,
+   "7": true
+  },
+  "ui-mutations": {
+   "2": true,
+   "6": true,
+   "9": true,
+   "12": true,
+   "11": true
+  }
+ },
+ "prodgate": {
+  "auth-sessions": {
+   "0": true,
+   "6": true,
+   "9": true,
+   "14": true,
+   "7": true,
+   "8": true,
+   "13": true
+  },
+  "billing": {
+   "6": true,
+   "9": true,
+   "17": true,
+   "18": true,
+   "22": true,
+   "23": true,
+   "8": true,
+   "10": true,
+   "16": true,
+   "19": true,
+   "21": true
+  },
+  "documents": {
+   "5": true,
+   "8": true,
+   "15": true,
+   "17": true,
+   "18": true
+  },
+  "inventory-orders": {
+   "1": true,
+   "4": true,
+   "5": true,
+   "9": true,
+   "12": true,
+   "15": true,
+   "18": true,
+   "20": true
+  },
+  "jobs-queue": {
+   "1": true,
+   "2": true,
+   "8": true,
+   "9": true,
+   "10": true,
+   "11": true,
+   "12": true,
+   "17": true,
+   "20": true,
+   "21": false,
+   "22": false
+  },
+  "tenant-notes": {
+   "2": true,
+   "4": false,
+   "5": false,
+   "7": true,
+   "9": true,
+   "13": true,
+   "15": true,
+   "17": true,
+   "19": true,
+   "8": true,
+   "18": true
+  },
+  "ui-flows": {
+   "0": true,
+   "1": true,
+   "5": true,
+   "11": true,
+   "12": true,
+   "14": false,
+   "17": true,
+   "23": true,
+   "25": false,
+   "27": true,
+   "29": true,
+   "4": true,
+   "8": false,
+   "9": true,
+   "20": true,
+   "24": false
+  },
+  "ui-mutations": {
+   "1": true,
+   "5": true,
+   "7": true,
+   "8": true,
+   "9": true,
+   "10": true,
+   "12": true,
+   "13": false,
+   "14": false,
+   "15": true,
+   "16": true,
+   "17": true,
+   "19": true,
+   "25": true,
+   "28": true,
+   "30": true,
+   "31": true,
+   "32": false,
+   "33": true,
+   "34": true,
+   "35": true,
+   "6": true,
+   "27": true
+  }
+ },
+ "prompt": {
+  "auth-sessions": {
+   "6": true,
+   "7": true,
+   "8": true
+  },
+  "billing": {
+   "3": true,
+   "8": true,
+   "6": true,
+   "7": true
+  },
+  "documents": {
+   "1": true,
+   "2": true,
+   "6": true
+  },
+  "inventory-orders": {
+   "4": true,
+   "6": true
+  },
+  "jobs-queue": {
+   "1": true,
+   "7": true,
+   "10": true
+  },
+  "tenant-notes": {
+   "2": true,
+   "4": true,
+   "5": true,
+   "8": true,
+   "9": true
+  },
+  "ui-flows": {
+   "2": true,
+   "4": true,
+   "6": true,
+   "11": true,
+   "13": true,
+   "9": true
+  },
+  "ui-mutations": {
+   "3": true,
+   "4": true,
+   "8": false,
+   "10": true,
+   "12": true,
+   "13": true,
+   "15": true,
+   "16": true
+  }
+ }
+}

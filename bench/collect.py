@@ -90,10 +90,9 @@ def unmatched(results: str, work: str, step1: str) -> None:
             continue
         score.TRUTH = _key_dir(r["mode"])
         for app, a in r["apps"].items():
-            t = score.truth(app)
             for i, fd in enumerate(a["findings"]):
-                on_decoy = any(score.norm(fd.get("file", ""), app) == d["file"] and score.near(fd, d["lines"], 3) for d in t.get("decoys", []))
-                if (r["mode"], app, i) not in hit and not on_decoy:
+                # findings on decoy lines are tested too: a different real bug there is still a real bug
+                if (r["mode"], app, i) not in hit:
                     out.append({"id": len(out), "mode": r["mode"], "app": app, "finding": i, **{k: fd.get(k) for k in ("file", "line", "bug", "repro")}})
     Path(work, "unmatched.json").write_text(json.dumps(out))
     files = {}

@@ -1,0 +1,670 @@
+{
+ "mode": "oneshot",
+ "tokens": {
+  "agents": 8,
+  "input": 98,
+  "cache_write": 516154,
+  "cache_read": 2765606,
+  "output": 68099,
+  "total": 3349957,
+  "harness_subagent_tokens": 643964,
+  "wall_seconds": 204
+ },
+ "apps": {
+  "auth-sessions": {
+   "findings": [
+    {
+     "file": "app/routers/me.py",
+     "line": 30,
+     "function": "revoke_session",
+     "bug": "DELETE /me/sessions/{id} never checks that the session belongs to the caller. Any signed-in user can end anyone's session, including sessions in other organisations, and an unknown id still gets 204.",
+     "repro": "User A signs in and gets session id 1. User B (any org) signs in and calls DELETE /me/sessions/1 with B's token. The response is 204, and A's token now gets 401 on GET /me."
+    },
+    {
+     "file": "app/services/signin.py",
+     "line": 63,
+     "function": "_accept_invite",
+     "bug": "The latest invite is accepted without checking its status. A revoked invite still works: the invited user signs in, the invite flips from revoked to accepted, and the account becomes active.",
+     "repro": "Admin calls POST /admin/invites for bo@acme.test and gets a temp password, then calls POST /admin/invites/{id}/revoke (status shows revoked). Signing in with bo@acme.test and the temp password returns 200 and a token. GET /admin/users shows bo as active."
+    },
+    {
+     "file": "app/deps.py",
+     "line": 32,
+     "function": "require_admin",
+     "bug": "require_admin depends on current_auth instead of ready_auth. An admin who still holds a one-time password can use every /admin route, but the README says only GET /me, POST /me/password and sign-out are allowed until they choose a password.",
+     "repro": "Admin A invites bo with role=admin. Bo signs in with the one-time password (must_set_password=true). Bo calls GET /admin/users or POST /admin/invites and gets 200/201 instead of 403."
+    },
+    {
+     "file": "app/services/users.py",
+     "line": 58,
+     "function": "create_invite",
+     "bug": "Re-inviting is refused whenever any user row has that email, including the INVITED row left by an expired or revoked invite. The README says 'If an invite expires unused, invite the address again', but that is impossible, so the address is locked out for good.",
+     "repro": "Admin invites bo@acme.test. The invite expires after 8 days, so sign-in returns 403 InviteExpired. Calling POST /admin/invites for bo@acme.test again returns 409 'already has an account', and there is no other route to recover."
+    },
+    {
+     "file": "app/main.py",
+     "line": 29,
+     "function": "create_app",
+     "bug": "Only the custom service exceptions get Problem Details handlers. The HTTPException 403s raised in deps.py, and the 422 request validation errors, come back as FastAPI's default {\"detail\": ...} body, not Problem Details JSON as the README promises.",
+     "repro": "A member calls GET /admin/users. The response is 403 with body {\"detail\":\"admins only\"}, which has no type, title or status fields. Posting {} to /auth/sign-in gives the same default-shape 422."
+    },
+    {
+     "file": "app/services/signin.py",
+     "line": 48,
+     "function": "sign_in",
+     "bug": "Timing leaks whether an account exists. For an unknown or disabled email, the scrypt check is skipped, so the 401 comes back noticeably faster than for a real account with a wrong password.",
+     "repro": "Time POST /auth/sign-in for nobody@x.test against ada@acme.test, both with a wrong password. The unknown address returns 401 with no scrypt work, which takes several ms less than the real one. Comparing response times tells which accounts exist."
+    }
+   ]
+  },
+  "billing": {
+   "findings": [
+    {
+     "file": "app/services/invoices.py",
+     "line": 58,
+     "function": "record_payment",
+     "bug": "Payments are not deduplicated by charge_id. The provider sends payment.succeeded even for charges whose response already said succeeded, and reconcile and the webhook can both record the same charge, so amount_paid_cents doubles. That also lets refunds go past what was really paid.",
+     "repro": "Subscribe to basic (FakeProvider succeeded, invoice paid 1000). Send payment.succeeded for ch_1 with the same invoice: amount_paid_cents becomes 2000 (verified). A refund of 2000 then passes the refundable check."
+    },
+    {
+     "file": "app/services/invoices.py",
+     "line": 72,
+     "function": "_mark_paid_up",
+     "bug": "It sets the subscription to ACTIVE with no status check, so a payment that settles after cancellation brings a canceled subscription back, which the README forbids.",
+     "repro": "provider.outcome=processing, subscribe, cancel with at_period_end=false (the pending invoice is not voided), then send payment.succeeded for ch_1: the subscription status is active (verified)."
+    },
+    {
+     "file": "app/services/subscriptions.py",
+     "line": 82,
+     "function": "change_plan",
+     "bug": "The new plan is looked up by code alone, with no Plan.account_id filter, so a subscription can move onto another merchant's plan. If two merchants share a code, an arbitrary one is picked.",
+     "repro": "Account 'other' creates plan gold. acct_sunrise subscribes to basic and calls change-plan with plan_code=gold: 200, and plan_id is the other account's plan (verified). It is billed at that price."
+    },
+    {
+     "file": "app/services/invoices.py",
+     "line": 76,
+     "function": "mark_payment_failed",
+     "bug": "It ignores the invoice's current status and charge_id. A late or out-of-order payment.failed for an older charge turns a PAID (or VOID) invoice into FAILED and the subscription into PAST_DUE. The invoice can then be paid again, a double charge.",
+     "repro": "outcome=failed, subscribe (ch_1 fails). outcome=succeeded, POST /invoices/{id}/pay (ch_2 pays it). Then send payment.failed for ch_1: the invoice is failed and the subscription past_due (verified)."
+    },
+    {
+     "file": "app/services/cycle.py",
+     "line": 17,
+     "function": "end_trials",
+     "bug": "cancel_at_period_end is ignored when a trial ends. A trial set to cancel at its end is turned ACTIVE and invoiced and charged a full period instead of being canceled.",
+     "repro": "Subscribe to team-trial, cancel with at_period_end=true, advance 15 days, run the billing cycle: trials_ended=[1], charged=[1], the invoice is paid and the subscription active (verified)."
+    },
+    {
+     "file": "app/services/invoices.py",
+     "line": 44,
+     "function": "pay_invoice",
+     "bug": "PENDING is committed before create_charge. If the provider call raises ProviderError, the invoice stays PENDING with charge_id None for good: reconcile_pending skips charge_id IS NULL (cycle.py:80), collect_open only takes OPEN, and Pay only takes open or failed. The idempotency key also changes on every attempt, so a manual retry after a timeout could charge twice.",
+     "repro": "provider.unreachable=True, POST /subscriptions basic gives 502. Set unreachable=False, advance 3h and run the cycle: charged=[] and reconciled=[], and the invoice stays pending forever (verified)."
+    },
+    {
+     "file": "app/services/refunds.py",
+     "line": 13,
+     "function": "refund_invoice",
+     "bug": "The idempotency check and the refundable check are read-then-write, and Refund has no unique constraint on (invoice_id, idempotency_key) (models.py:94). Concurrent requests can therefore refund twice with the same key, or refund more than was paid with different keys.",
+     "repro": "Send two parallel POST /invoices/{id}/refunds with the same Idempotency-Key (or different keys, each for the full amount): both pass the checks, both call provider.refund, and amount_refunded_cents ends above amount_paid_cents."
+    },
+    {
+     "file": "app/services/cycle.py",
+     "line": 38,
+     "function": "renew_due",
+     "bug": "Only ACTIVE subscriptions are selected, so a PAST_DUE subscription set to cancel at period end is never canceled when its period ends.",
+     "repro": "Subscribe with outcome=failed (past_due), cancel with at_period_end=true, advance past current_period_end, run the cycle: the subscription stays past_due and is not canceled."
+    },
+    {
+     "file": "app/routers/billing.py",
+     "line": 94,
+     "function": "provider_webhook",
+     "bug": "A correctly signed body that is not valid JSON, or that lacks id, type or data, raises an unhandled exception and returns 500 instead of a 4xx Problem response. The provider then retries it forever.",
+     "repro": "POST /webhooks/provider with a valid signature over the body 'not json': json.loads raises and the response is 500."
+    }
+   ]
+  },
+  "documents": {
+   "findings": [
+    {
+     "file": "app/routers/documents.py",
+     "line": 63,
+     "function": "get_reading",
+     "bug": "GET /readings/{id} takes no X-Org-Id and does no org or withdrawn check, so anyone can read any organisation's reading text, including the text of withdrawn documents.",
+     "repro": "Org A uploads a doc and the reader completes reading id 1. Call GET /readings/1 with no headers, or with X-Org-Id: B: you get 200 with org A's full text. Withdraw the doc and the call still returns its text."
+    },
+    {
+     "file": "app/services/readings.py",
+     "line": 74,
+     "function": "fail_reading",
+     "bug": "No check that the reading is still RUNNING, so a repeated or late error callback overwrites a finished reading. A DONE current reading becomes FAILED with is_current=False, and the document stays READY with no current reading.",
+     "repro": "Upload, then POST /internal/readings/1/result. Then POST /internal/readings/1/error {error:'x'}. Reading 1 is now failed and not current. GET /documents/1/reading returns 404, and search no longer finds the doc even though its status is ready."
+    },
+    {
+     "file": "app/services/readings.py",
+     "line": 86,
+     "function": "fail_reading",
+     "bug": "A repeated error callback for an old reading, sent while a re-read is running, flips the document from PROCESSING to FAILED. That allows a second re-read, so two readings run at once and whichever finishes last becomes current, even if it is the older one.",
+     "repro": "Upload. Reading 1 gets an error, so the doc is failed. Re-read starts reading 2 and the doc is processing. Send the reading 1 error callback again: the doc becomes failed while reading 2 is still running. Re-read again to start reading 3. Complete reading 3, then reading 2: reading 2 replaces reading 3 as current."
+    },
+    {
+     "file": "app/services/readings.py",
+     "line": 65,
+     "function": "complete_reading",
+     "bug": "It sets doc.status = READY without checking for WITHDRAWN, so a result that arrives after a withdraw silently brings the document back. withdrawn_at and status_before_withdraw stay set.",
+     "repro": "Upload, so the doc is processing. POST /documents/1/withdraw. Then POST /internal/readings/1/result. The doc's status is ready again, it shows in listings, search and download, and restore now returns 409 'not withdrawn'."
+    },
+    {
+     "file": "app/services/documents.py",
+     "line": 109,
+     "function": "restore_document",
+     "bug": "Restore goes back to status_before_withdraw blindly. If the doc was withdrawn while PROCESSING and its reading then failed or expired, it is restored as PROCESSING with no running reading, and it stays stuck: re-read gives 409 and expire never touches it.",
+     "repro": "Upload, then withdraw while processing. POST /internal/readings/1/error, which leaves the doc unchanged because it is withdrawn. POST /documents/1/restore puts it back as processing. POST /documents/1/reread gives 409 'cannot be re-read while processing', permanently."
+    },
+    {
+     "file": "app/services/readings.py",
+     "line": 97,
+     "function": "expire_stale_readings",
+     "bug": "It only marks the readings FAILED and never updates the document, which stays PROCESSING forever. The README says expiry exists 'so the document can be re-read', but re-read requires READY or FAILED.",
+     "repro": "Upload, never call back, and wait more than 30 minutes (or backdate started_at). POST /internal/readings/expire returns {expired:1}. The doc is still processing, and POST /documents/1/reread gives 409."
+    },
+    {
+     "file": "app/services/projects.py",
+     "line": 35,
+     "function": "rename_project",
+     "bug": "It moves documents using list_documents with its default include_withdrawn=False, so withdrawn documents keep the old code. After a restore they are orphaned in a project that no longer exists, or a new project that reuses the old code takes them over.",
+     "repro": "Create project 'aa' and upload a doc. Withdraw it. PATCH /projects/aa {code:'bb'}. GET /projects/bb/documents?include_withdrawn=true is missing the doc. Restore it and it still has project_code 'aa'. Create a new project 'aa' and the doc appears there."
+    },
+    {
+     "file": "app/routers/documents.py",
+     "line": 24,
+     "function": "download",
+     "bug": "The user-supplied filename goes raw into the Content-Disposition header. A name outside latin-1 makes Starlette's header encoding fail with a 500, and a name containing a double quote breaks the header.",
+     "repro": "POST /projects/p/documents?filename=\u62a5\u544a.txt with a text body. GET /documents/{id}/content returns 500 (UnicodeEncodeError). A filename like a\"b.txt produces a malformed header."
+    },
+    {
+     "file": "app/routers/projects.py",
+     "line": 43,
+     "function": "upload_document",
+     "bug": "The whole request body is read into memory before the 20 MB check, so there is no limit on what the server buffers. The async route then runs blocking sync DB work on the event loop.",
+     "repro": "POST a 2 GB body to /projects/p/documents?filename=x.txt. The server buffers all of it before returning 422 'too large'. Concurrent large uploads exhaust memory."
+    },
+    {
+     "file": "app/services/documents.py",
+     "line": 105,
+     "function": "restore_document",
+     "bug": "Restore does not re-check for duplicates, so it can create two live documents with the same SHA-256 in one project, which the dedupe rule is meant to prevent.",
+     "repro": "Upload file F (doc 1) and withdraw it. Upload F again: there is no live copy, so doc 2 is created. Restore doc 1. Both are live with the same hash, and later uploads of F return an arbitrary one of them."
+    },
+    {
+     "file": "app/routers/projects.py",
+     "line": 44,
+     "function": "upload_document",
+     "bug": "The content type is compared case-sensitively against ACCEPTED_TYPES, but MIME types are case-insensitive, so valid uploads are rejected.",
+     "repro": "Upload with Content-Type: Text/Plain or APPLICATION/PDF and you get 422 'unsupported content type'."
+    },
+    {
+     "file": "app/deps.py",
+     "line": 18,
+     "function": "require_reader",
+     "bug": "hmac.compare_digest on str raises TypeError when either string has non-ASCII characters, so a bad Authorization header gives a 500 instead of a 401. A missing header gives a 422 instead of a 401.",
+     "repro": "POST /internal/readings/1/result with an Authorization header containing the byte 0xE9 (decoded as '\u00e9') returns 500. Leaving out Authorization returns 422."
+    },
+    {
+     "file": "app/services/projects.py",
+     "line": 21,
+     "function": "create_project",
+     "bug": "The check-then-insert has no IntegrityError handling, so concurrent creates or renames to the same code hit uq_projects_org_code and return a 500 instead of a 409.",
+     "repro": "Send two parallel POST /projects {code:'aa'} requests for the same org. One gets 201 and the other a 500 IntegrityError."
+    }
+   ]
+  },
+  "inventory-orders": {
+   "findings": [
+    {
+     "file": "app/services/orders.py",
+     "line": 22,
+     "function": "cancel_order",
+     "bug": "OPEN_STATES includes SHIPPED, so cancel_order accepts shipped orders. The customer gets a full refund and keeps the goods, which breaks the README rule 'allowed until the order ships'.",
+     "repro": "Place an order, confirm it, then POST /orders/{id}/ship. As the customer, POST /orders/{id}/cancel: you get 200, status cancelled and payment refunded, and on_hand stays decreased."
+    },
+    {
+     "file": "app/services/returns.py",
+     "line": 70,
+     "function": "approve_return",
+     "bug": "Only a REJECTED status is refused. An already APPROVED return can be approved again, which refunds again (up to what is left of the captured amount) and restocks the lines a second time.",
+     "repro": "Deliver an order of 2 units and request a return of 1. Call POST /returns/{id}/approve twice: there are two refunds in gateway.refunds and on_hand rises by 2."
+    },
+    {
+     "file": "app/routers/returns.py",
+     "line": 19,
+     "function": "request_return",
+     "bug": "The route uses orders.get_order instead of an ownership check, so any customer can open a return on another customer's delivered order.",
+     "repro": "Customer A has delivered order 1. Customer B sends POST /orders/1/returns with X-Customer-Id: B and A's line ids. The response is 201 and the return is created against A's order."
+    },
+    {
+     "file": "app/services/orders.py",
+     "line": 178,
+     "function": "apply_warehouse_event",
+     "bug": "The packing event skips _transition and allows any state except cancelled and payment_failed. A DELIVERED or SHIPPED order goes back to PACKING and can then be cancelled for a full refund, and a PLACED order goes to packing without being confirmed.",
+     "repro": "Deliver an order, then POST /warehouse/events {kind:'packing'}: the status becomes packing. Then POST /orders/{id}/cancel and the captured payment is refunded although the goods were delivered."
+    },
+    {
+     "file": "app/services/orders.py",
+     "line": 152,
+     "function": "ship_order",
+     "bug": "Shipping is allowed from PLACED, so the order skips confirm and the payment is never captured. The goods ship and are delivered while the card stays authorize-only, and confirm is then impossible.",
+     "repro": "Place an order (payment authorized), then POST /orders/{id}/ship and a delivered event. The status is delivered, payment.status stays authorized and captured_cents is 0. A later return refunds nothing."
+    },
+    {
+     "file": "app/services/orders.py",
+     "line": 102,
+     "function": "place_order",
+     "bug": "When the card is declined, the stock reserved by stock.reserve is never released. The order is payment_failed, which cannot be cancelled and which the sweeper ignores, so the reserved count leaks permanently.",
+     "repro": "Create a product with on_hand=1 and place an order with card_token 'tok_decline'. GET /products/{id} shows reserved=1 and available=0 for good, and every later order gets 409 out of stock."
+    },
+    {
+     "file": "app/services/stock.py",
+     "line": 23,
+     "function": "reserve",
+     "bug": "The availability check and the increment are a Python read-modify-write on a stale ORM value (product.reserved = product.reserved + qty), unlike release and consume, which update atomically in SQL. Concurrent checkouts both pass the check, so stock is oversold and the reserved count is wrong.",
+     "repro": "With on_hand=1, send two POST /orders for quantity 1 at the same moment. Both read available=1 and both succeed with held reservations, and reserved ends at 1 instead of 2."
+    },
+    {
+     "file": "app/services/orders.py",
+     "line": 203,
+     "function": "expire_unconfirmed_orders",
+     "bug": "The loop catches only OrderError. A PaymentGatewayError from void (an unknown or voided charge) or a NotFound aborts the whole sweep, so later stale orders are never expired.",
+     "repro": "Make two stale placed orders and drop the first one's charge from gateway.charges (or restart the gateway). The sweeper raises on the first order and the second stays placed with its stock held."
+    },
+    {
+     "file": "app/routers/products.py",
+     "line": 28,
+     "function": "create_product",
+     "bug": "A duplicate SKU raises an unhandled IntegrityError on commit, so the client gets a 500 instead of a 409 problem response.",
+     "repro": "POST /products twice with the same sku and the staff token. The second request returns 500 Internal Server Error."
+    },
+    {
+     "file": "app/deps.py",
+     "line": 27,
+     "function": "require_staff",
+     "bug": "hmac.compare_digest on str raises TypeError for non-ASCII characters. A header byte above 0x7F (decoded as latin-1) returns a 500 instead of a 403.",
+     "repro": "Send POST /orders/1/confirm with the header X-Staff-Token: \\xe9 (byte 0xE9). The server raises TypeError and returns 500."
+    },
+    {
+     "file": "app/services/orders.py",
+     "line": 171,
+     "function": "apply_warehouse_event",
+     "bug": "A shipped event with no carrier or tracking number is accepted and stored as 'unknown' and an empty string. The README requires both, and the manual ShipIn path enforces min_length=1.",
+     "repro": "POST /warehouse/events {order_id, kind:'shipped'} with no carrier or tracking. The response is 200 and the order shows tracking_number ''."
+    }
+   ]
+  },
+  "jobs-queue": {
+   "findings": [
+    {
+     "file": "app/routers/jobs.py",
+     "line": 37,
+     "function": "cancel_job",
+     "bug": "Cancel route has no current_tenant dependency and service cancel_job takes no tenant, so any caller (even without X-Tenant-Id) can cancel any tenant's job.",
+     "repro": "Tenant A POST /jobs -> id 1. Tenant B (or no header) POST /jobs/1/cancel -> 200, job A canceled."
+    },
+    {
+     "file": "app/services/jobs.py",
+     "line": 94,
+     "function": "claim_next_job",
+     "bug": "Claim is a plain SELECT then ORM write with no conditional UPDATE (status==queued) or row lock, so two concurrent claimers both get the same job; violates one-worker-at-a-time.",
+     "repro": "Two workers POST /worker/claim on same queue at the same moment with one queued job; both SELECT it before either commits, both receive the job and run it (last commit wins lease_owner)."
+    },
+    {
+     "file": "app/services/batches.py",
+     "line": 50,
+     "function": "on_job_finished",
+     "bug": "Finish check counts only SUCCEEDED+DEAD, ignoring CANCELED, so a batch containing any canceled job never finishes and never queues its callback.",
+     "repro": "POST /batches with 2 jobs and callback_url; cancel job 1; run job 2 to success -> batch stays 'open' forever, no batch.callback job."
+    },
+    {
+     "file": "app/services/jobs.py",
+     "line": 106,
+     "function": "claim_next_job",
+     "bug": "Claim never sets/reset last_heartbeat_at. A worker that dies before its first heartbeat leaves a job RUNNING forever (NULL < cutoff is false in recovery). A re-claimed job keeps the previous attempt's old heartbeat and is wrongly recovered from its new worker at the next sweep.",
+     "repro": "(a) Claim job, never heartbeat, wait >90s, POST /worker/recover -> recovered [] forever. (b) Job heartbeats, worker dies, recover requeues it, worker B claims it; next /worker/recover within seconds takes it back and B's heartbeats get 409."
+    },
+    {
+     "file": "app/services/jobs.py",
+     "line": 129,
+     "function": "complete_job",
+     "bug": "Conditional update checks only lease_owner, not status==RUNNING, and complete never clears lease_owner, so a repeated complete is applied again: duplicate JobOutput rows, duplicate 'succeeded' event, finished_at rewritten. Violates 'each report takes effect once'.",
+     "repro": "Claim job as w1, POST /worker/jobs/1/complete {worker_id:w1, output:{a:1}} twice -> both 200; GET /jobs/1/outputs returns 2 outputs."
+    },
+    {
+     "file": "app/services/jobs.py",
+     "line": 200,
+     "function": "retry_job",
+     "bug": "Retry accepts any non-queued/running job (succeeded, canceled), not only dead ones as documented. It also leaves lease_owner set, so a retried succeeded job still accepts the old worker's late complete while it is QUEUED.",
+     "repro": "Run job to success (lease_owner w1). POST /jobs/1/retry -> 200 queued (should be 409). Then POST /worker/jobs/1/complete {worker_id:w1} -> marks the queued job succeeded without running it."
+    },
+    {
+     "file": "app/worker.py",
+     "line": 54,
+     "function": "Worker.run_once",
+     "bug": "LeaseLost raised by complete_job (job canceled or recovered while the handler ran) is not caught, so it propagates out of run_once and crashes run_until_empty.",
+     "repro": "Handler that does not call beat; cancel the job via POST /jobs/{id}/cancel while it runs; handler returns -> complete_job raises LeaseLost -> worker loop raises."
+    },
+    {
+     "file": "app/services/recovery.py",
+     "line": 31,
+     "function": "recover_stale_jobs",
+     "bug": "Recovery overwrites status/lease_owner via an unconditional ORM update by PK. A complete/heartbeat that commits between find_stale_jobs and commit is clobbered, so a succeeded job goes back to QUEUED and runs again.",
+     "repro": "Job with stale heartbeat; sweeper SELECTs it; worker's complete commits SUCCEEDED; sweeper commits status=queued -> job re-run, already-sent output duplicated."
+    },
+    {
+     "file": "app/services/jobs.py",
+     "line": 187,
+     "function": "cancel_job",
+     "bug": "Cancel checks the terminal state on a loaded row, then writes unconditionally. A complete committing in between gets overwritten to CANCELED (output already stored), and the batch is counted wrongly.",
+     "repro": "Running job; cancel request loads it as RUNNING; worker complete commits SUCCEEDED; cancel commits -> job shows canceled with an output and a 'succeeded' event."
+    },
+    {
+     "file": "app/services/jobs.py",
+     "line": 65,
+     "function": "build_job",
+     "bug": "A timezone-aware run_after from the client is stored as-is. SQLite's DateTime drops tzinfo, so the wall time is read as UTC and the job runs early or late by the offset.",
+     "repro": "POST /jobs {queue:q, kind:k, run_after:'2030-01-01T05:00:00+05:00'} -> stored 2030-01-01 05:00 (should be 00:00 UTC); claimable 5h late. A negative offset makes it run early."
+    },
+    {
+     "file": "app/services/jobs.py",
+     "line": 84,
+     "function": "enqueue_job",
+     "bug": "On IntegrityError the code rolls back and returns whatever the select finds. If no matching row is visible, it returns (None, False) and the route serializes None as JobOut -> 500.",
+     "repro": "Concurrent duplicate POST /jobs with same idempotency_key where the competing insert is not yet visible/committed to this session's select -> returns None -> response validation error 500."
+    },
+    {
+     "file": "app/routers/jobs.py",
+     "line": 23,
+     "function": "list_jobs",
+     "bug": "The limit is capped only from above. A negative limit passes through, and SQLite treats LIMIT -1 as no limit, bypassing the 500 cap.",
+     "repro": "GET /jobs?limit=-1 -> returns every job of the tenant."
+    },
+    {
+     "file": "app/deps.py",
+     "line": 13,
+     "function": "require_worker",
+     "bug": "hmac.compare_digest on str raises TypeError for non-ASCII input, so a header with latin-1 bytes returns 500 instead of 401.",
+     "repro": "POST /worker/claim with header X-Worker-Token containing byte 0xE9 -> 500 Internal Server Error."
+    }
+   ]
+  },
+  "tenant-notes": {
+   "findings": [
+    {
+     "file": "app/routers/shares.py",
+     "line": 48,
+     "function": "download_shared_note",
+     "bug": "The /s/{token}/raw route never checks link.revoked_at, so a revoked share link still downloads the note as Markdown. The README says revoking ends both routes.",
+     "repro": "Editor creates a share, then DELETE /workspaces/{ws}/shares/{id}. GET /s/{token} returns 404, but GET /s/{token}/raw still returns 200 with the note."
+    },
+    {
+     "file": "app/services/exports.py",
+     "line": 40,
+     "function": "collect_notes",
+     "bug": "When note_ids is given, the query filters only on Note.id IN (...) and drops the workspace_id filter. This leaks notes from other tenants into the export.",
+     "repro": "User A is a member of workspace 1 only. A sends POST /workspaces/1/exports {\"note_ids\":[<id of a note in workspace 2>]}. GET .../download contains workspace 2's note."
+    },
+    {
+     "file": "app/services/exports.py",
+     "line": 64,
+     "function": "run_export",
+     "bug": "Cancelling a queued job sets status to 'cancelling'. _claim then fails and returns, and nothing ever moves the job to a final state. The 'cancelling' status is part of the unique active index, so the workspace can never start another export.",
+     "repro": "POST an export, then DELETE it before the background task claims it (status becomes 'cancelling'). Every later POST /workspaces/{ws}/exports returns 409 'already in progress', forever."
+    },
+    {
+     "file": "app/services/exports.py",
+     "line": 79,
+     "function": "run_export",
+     "bug": "run_export never checks for cancellation. It writes status='done' and the result by primary key, overwriting a 'cancelling' status set while the job was running. A cancelled export therefore produces a downloadable file.",
+     "repro": "Start an export of a large workspace. While it is 'running', DELETE /exports/{id} (status becomes 'cancelling'). When rendering finishes the status becomes 'done' and /download returns the file."
+    },
+    {
+     "file": "app/routers/notes.py",
+     "line": 64,
+     "function": "restore_note",
+     "bug": "This route uses require_member instead of require_live_member, so an editor can restore notes inside a deleted workspace. The restored note is live again, and its share links (/s/{token}) serve content while the workspace is deleted.",
+     "repro": "Owner deletes a workspace that has a shared note. An editor sends POST /workspaces/{ws}/trash/{note}/restore and gets 200. GET /s/{token} now returns the note even though the workspace is deleted."
+    },
+    {
+     "file": "app/routers/notes.py",
+     "line": 59,
+     "function": "list_trash",
+     "bug": "This route uses require_member instead of require_live_member. Any member, including a viewer, can read the full title and body of every note in a deleted workspace. The README says that content is gone for everyone.",
+     "repro": "Owner sends DELETE /workspaces/{ws}. A viewer sends GET /workspaces/{ws}/trash and gets 200 with all notes, including their bodies."
+    },
+    {
+     "file": "app/services/notes.py",
+     "line": 71,
+     "function": "update_note",
+     "bug": "The optimistic-lock check reads the version in Python and then does an unconditional UPDATE by id, with no WHERE version=base_version and no version_id_col. Two concurrent edits with the same base_version both succeed, and one silently overwrites the other.",
+     "repro": "Two editors send PATCH /notes/{id} {base_version:1,...} at the same moment. Both get 200 with version 2, and the first edit is lost instead of one request getting 409."
+    },
+    {
+     "file": "app/services/notes.py",
+     "line": 46,
+     "function": "create_note",
+     "bug": "Idempotency is check-then-insert, and request_id has no unique constraint. A concurrent double-click or retry creates two notes with the same request_id.",
+     "repro": "Send two POST /workspaces/{ws}/notes requests with the same request_id at the same time. Both miss _find_by_request, two notes are inserted, and both responses are 201."
+    },
+    {
+     "file": "app/services/workspaces.py",
+     "line": 37,
+     "function": "add_member",
+     "bug": "An owner can change any membership's role, including their own or the last owner's, with no last-owner guard. The workspace can end up with no owner, so nobody can manage members or delete or restore it.",
+     "repro": "The only owner sends POST /workspaces/{ws}/members {\"user_id\":\"<self>\",\"role\":\"viewer\"}. The workspace now has no owner, and every owner-only route returns 403 for everyone."
+    },
+    {
+     "file": "app/routers/shares.py",
+     "line": 26,
+     "function": "list_shares",
+     "bug": "Listing shares requires only require_live_member and returns the public tokens. A viewer can get a working public link, although creating shares is meant to be editor-only.",
+     "repro": "A viewer sends GET /workspaces/{ws}/notes/{id}/shares and receives the token. They can then give /s/{token} to people outside the workspace."
+    },
+    {
+     "file": "app/services/exports.py",
+     "line": 18,
+     "function": "start_export",
+     "bug": "An empty note_ids list is falsy, so it is stored as None and the job exports the whole workspace instead of nothing.",
+     "repro": "POST /workspaces/{ws}/exports {\"note_ids\":[]}. The download contains every live note in the workspace."
+    },
+    {
+     "file": "app/services/notes.py",
+     "line": 23,
+     "function": "list_notes",
+     "bug": "The search term goes into the ILIKE pattern without escaping, so a % or _ typed by the user acts as a wildcard and the results are wrong.",
+     "repro": "GET /workspaces/{ws}/notes?q=_ returns every note, not only notes that contain an underscore."
+    }
+   ]
+  },
+  "ui-flows": {
+   "findings": [
+    {
+     "file": "src/flows/job-poller.ts",
+     "line": 73,
+     "function": "JobPoller.check",
+     "bug": "A 'cancelled' job is not treated as finished, so polling never stops and onFinished is never called.",
+     "repro": "api.setJob({id:'j1',status:'cancelled'}); poller.watch('j1'); the poller keeps polling every interval forever, polling stays true and onFinished never fires."
+    },
+    {
+     "file": "src/flows/job-poller.ts",
+     "line": 78,
+     "function": "JobPoller.check",
+     "bug": "Every error stops polling. The README says network and 5xx errors should be retried on the next tick and only a 404 should stop.",
+     "repro": "api.setJob running j1; api.failNext('getJob') (503); watch('j1'): error='Service unavailable', polling=false, and the chip stays stuck even though the job is still running."
+    },
+    {
+     "file": "src/flows/investment-wizard.ts",
+     "line": 73,
+     "function": "InvestmentWizard.open",
+     "bug": "Opening a different fund resets the step and errors but not answers, so the previous fund's company and terms carry over into the new fund's wizard.",
+     "repro": "open('f1'); set('company','Acme'); set('amount','5'); open('f2'): answers.company is still 'Acme', and submitting creates Acme under f2."
+    },
+    {
+     "file": "src/flows/investment-wizard.ts",
+     "line": 113,
+     "function": "InvestmentWizard.submit",
+     "bug": "Submit does not re-validate the earlier steps, so after the user goes back, breaks an answer and jumps to Review with the stepper, invalid data is sent. The server only checks company.",
+     "repro": "Fill all steps up to Review; goTo(1); set('amount',''); set('ownershipPct','500'); goTo(2); submit(): an investment is created with amount 0 and ownership 500%."
+    },
+    {
+     "file": "src/flows/investment-wizard.ts",
+     "line": 114,
+     "function": "InvestmentWizard.submit",
+     "bug": "Submit has no guard on createdId. A second click after the first request has resolved, or a reopen of the same fund (which keeps Review), creates a duplicate investment.",
+     "repro": "Reach Review; await submit(); await submit() again (or open the same fund and click Submit): api.investments has 2 records."
+    },
+    {
+     "file": "src/flows/scenario-bar.ts",
+     "line": 47,
+     "function": "ScenarioBar.reset",
+     "bug": "Reset does not clear openedId, openedName and revision, so the next Save overwrites the previously opened scenario instead of creating a new untitled one, and the title still shows the old name.",
+     "repro": "open('sc-1'); reset(); edit('holdYears',9); save('New'): updateVersion is called on sc-1 and no new scenario is created."
+    },
+    {
+     "file": "src/flows/scenario-bar.ts",
+     "line": 54,
+     "function": "ScenarioBar.open",
+     "bug": "confirmDiscard is only asked when a saved scenario is open (openedId !== null), so unsaved edits to an untitled scenario are discarded silently.",
+     "repro": "New bar; edit('exitMultiple',12); open('sc-1'): confirmDiscard is never called and the edits are lost."
+    },
+    {
+     "file": "src/flows/scenario-bar.ts",
+     "line": 78,
+     "function": "ScenarioBar.save",
+     "bug": "When save resolves it unconditionally writes openedId, openedName, revision and baseline. An open() or reset() made while the save was in flight gets clobbered, so the bar points at scenario A while showing B's inputs.",
+     "repro": "Delay updateVersion with api.before; save() on A; open('B') (confirm yes) resolves first; then the save resolves: openedId=A while inputs are B, and the next save writes B's inputs into A."
+    },
+    {
+     "file": "src/flows/upload-queue.ts",
+     "line": 127,
+     "function": "UploadQueue.persist",
+     "bug": "persist stores only queued and failed items, so a file that is uploading is dropped from the store. After a reload or crash mid-upload, that file is gone.",
+     "repro": "add([fileA]); pump marks it uploading and persists; crash (new queue on the same store) and restore(): fileA is missing, although it never finished."
+    },
+    {
+     "file": "src/flows/upload-queue.ts",
+     "line": 63,
+     "function": "UploadQueue.restore",
+     "bug": "nextId is set to items.length + 1 instead of a value past the highest stored id, so newly added files can reuse a restored file's id. retry and remove then hit the wrong row.",
+     "repro": "Store holds only u2 (u1 finished). restore(); add([x]): the new item gets id 'u2', a duplicate, and remove('u2') deletes both."
+    },
+    {
+     "file": "src/flows/upload-queue.ts",
+     "line": 62,
+     "function": "UploadQueue.restore",
+     "bug": "Restored failed items stay 'failed' with error cleared to null, so they do not upload again after a reload as the README says, and they show as failed with no reason.",
+     "repro": "A file fails (stored status failed); reload and restore(): the item stays failed with error=null and is never pumped."
+    },
+    {
+     "file": "src/flows/upload-queue.ts",
+     "line": 79,
+     "function": "UploadQueue.retry",
+     "bug": "retry calls upload() directly. It does not set status to 'uploading' first or go through active/pump, so it bypasses the two-at-a-time limit. A double Retry starts duplicate uploads because the status stays 'failed' until createUploadSession resolves.",
+     "repro": "Fail 3 files, then retry all 3 while 2 are queued: 5 uploads run at once. Or call retry('u1') twice quickly: two sessions and two uploads of the same file."
+    }
+   ]
+  },
+  "ui-mutations": {
+   "findings": [
+    {
+     "file": "src/screens/document-list.ts",
+     "line": 94,
+     "function": "addDocument",
+     "bug": "Quick add passes its row cleanup through per-call callbacks, which only run for the latest call. A second add made before the first settles drops the first add's callbacks, so the first row stays 'saving' forever, or is never marked failed.",
+     "repro": "Gate createDoc with api.before. Call addDocument('A') then addDocument('B'), then release both. pendingRows still holds A even though doc A exists. The same happens with A failing: its row is never marked failed."
+    },
+    {
+     "file": "src/screens/document-list.ts",
+     "line": 53,
+     "function": "star.onMutate",
+     "bug": "The optimistic star changes the cached Doc object in place, and 'previous' is that same array. The onError rollback writes back the already-changed array, so a refused star is never undone.",
+     "repro": "Load a folder with an unstarred doc. Call api.failNext('setStarred'), then toggleStar(id) and settle. list.docs[0].starred is still true, but the server has false."
+    },
+    {
+     "file": "src/screens/document-list.ts",
+     "line": 48,
+     "function": "star (Mutation options)",
+     "bug": "The star mutation has no onSuccess/onSettled that writes the server result or invalidates. A list refetch that lands while setStarred is in flight overwrites the optimistic star with the old value, and the successful save never corrects it.",
+     "repro": "Gate setStarred. Call toggleStar(id). While gated, call load() (or a quick add, which invalidates the list) and let it finish: the row shows unstarred. Release setStarred: it succeeds, but the row stays unstarred while the server has starred=true."
+    },
+    {
+     "file": "src/screens/document-list.ts",
+     "line": 116,
+     "function": "deleteDocument",
+     "bug": "Deleting the selected row never clears selectedId/selected. The list subscription does not refresh 'selected' either, so the side panel keeps showing a document that no longer exists.",
+     "repro": "select(doc.id), then await deleteDocument(doc.id). list.docs no longer has the doc, but list.selected still holds it, and panel actions on it return 404."
+    },
+    {
+     "file": "src/screens/fund-form.ts",
+     "line": 90,
+     "function": "open",
+     "bug": "open() uses 'this.draft ??= toDraft(fund)' and never resets dirty or fieldErrors. Opening a second fund keeps the first fund's draft, and Save then writes fund A's values into fund B as 'changes'.",
+     "repro": "open('fund-A'), then open('fund-B'). form.draft.name is still A's name and form.fund is B. Call submit(): it sends patch {name: A's name, ...} to fund B and overwrites it."
+    },
+    {
+     "file": "src/screens/fund-form.ts",
+     "line": 114,
+     "function": "submit (onSuccess callback)",
+     "bug": "A successful save never clears errorMessage. The README says save errors show only until the next successful save, but the old error stays above the form after it.",
+     "repro": "Make a save fail (api.failNext('updateFund') or a version conflict) so errorMessage is set. Fix it, then submit again and the save succeeds: errorMessage still shows the old error."
+    },
+    {
+     "file": "src/screens/fund-form.ts",
+     "line": 106,
+     "function": "submit",
+     "bug": "submit() does not check canSave/isPending. A second submit while one is in flight sends the same version, so it gets a 409. Because only the latest call's callbacks run, the first save's success is dropped: the form stays dirty with a conflict error even though the data was saved.",
+     "repro": "Gate updateFund. Edit a field, then call submit() twice (double click or Enter). Release. The first save succeeds on the server, the second returns 409. Result: errorMessage='This fund was changed by someone else', dirty stays true, and form.fund still has the old version."
+    },
+    {
+     "file": "src/screens/review-panel.ts",
+     "line": 66,
+     "function": "show",
+     "bug": "show() writes listActivity's result without checking that the same document is still shown. When a slow response for an earlier doc arrives after a later show(), the panel displays the wrong document's history.",
+     "repro": "Gate listActivity for doc A. Call show(A), then show(B) and let B resolve. Release A: panel.doc is B, but panel.activity holds A's entries."
+    },
+    {
+     "file": "src/screens/review-panel.ts",
+     "line": 90,
+     "function": "archiveMany",
+     "bug": "The loop has no try/finally. mutateAsync rejects on the first failure, so busy stays true for good: the spinner never stops, canArchiveSelection stays false, and no notice is shown.",
+     "repro": "Seed a doc that is in_review (archive is not allowed), then call archiveMany([thatId, otherId]). It rejects with 409, panel.busy stays true and canArchiveSelection stays false."
+    },
+    {
+     "file": "src/screens/review-panel.ts",
+     "line": 90,
+     "function": "archiveMany",
+     "bug": "Bulk archive reuses the panel's single 'transition' mutation. Each archive call becomes the latest call, so a run() still in flight loses its per-call callbacks: panel.doc is not updated and actionError is not shown. archiveMany also never updates this.doc when the open document is archived, so its status and buttons go stale.",
+     "repro": "Gate transition. Call run('approve') on the shown doc, then archiveMany([otherId]), then release. The approve succeeds, but panel.doc keeps in_review with Approve/Send back buttons. Alternatively, archiveMany([panel.doc.id]): the panel still shows the old status and 'Archive'."
+    },
+    {
+     "file": "src/screens/review-panel.ts",
+     "line": 14,
+     "function": "availableActions",
+     "bug": "availableActions ignores who is viewing, so the author is offered Approve/Send back on their own in_review document. The documented rule is that a reviewer cannot review their own document, so the button always ends in a 403.",
+     "repro": "Set up the panel as user 'ana' and show an in_review doc written by 'ana'. panel.actions is ['approve','reject']. Clicking Approve returns 'You cannot review your own document'."
+    },
+    {
+     "file": "src/lib/mutation.ts",
+     "line": 77,
+     "function": "Mutation.mutateAsync",
+     "bug": "Per-call callbacks run inside the try. If a per-call onSuccess/onSettled throws after a successful request, the catch runs the creation-time onError (rollback) and onSettled a second time, and moves state from success to error.",
+     "repro": "new Mutation({mutationFn: async()=>1, onError: rollback, onSettled: s}).mutate(v, {onSuccess: ()=>{throw new Error('x')}}). rollback runs, s runs twice, and state.status ends as 'error' though the server write succeeded."
+    },
+    {
+     "file": "src/lib/query-client.ts",
+     "line": 88,
+     "function": "QueryClient.invalidateQueries",
+     "bug": "invalidateQueries calls fetchQuery, and fetchQuery returns an in-flight request if one exists. A fetch started before a write is reused, so invalidation after a mutation can resolve with data that does not include the write. Against a real HTTP server, a just-created doc can vanish after its pending row is removed.",
+     "repro": "Start list.load() so a listDocs request is in flight and its response was produced before the write. Then create a doc, whose onSuccess invalidates ['docs', folder]. The invalidation awaits the old request and writes the stale list, and the new doc is missing from list.docs."
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,63 @@
+{
+ "mode": "recheck-prodgate",
+ "tokens": {
+  "agents": 6,
+  "input": 84,
+  "cache_write": 312926,
+  "cache_read": 2327919,
+  "output": 28380,
+  "total": 2669309,
+  "harness_subagent_tokens": 423114,
+  "wall_seconds": 229
+ },
+ "apps": {
+  "jobs-queue": {
+   "findings": [
+    {
+     "file": "app/services/batches.py",
+     "line": 54,
+     "function": "on_job_finished",
+     "bug": "Diff swapped the guarded `update(Batch).where(Batch.status == BatchStatus.OPEN)` + `rowcount == 1` check for a plain ORM write (`batch.status = final; if batch.callback_url: _queue_callback(...)`). The open check is now a Python read at line 44, with no compare-and-swap.",
+     "repro": "1) POST /batches, 2 jobs, callback_url set. 2) Workers W1 and W2 each claim one job. 3) Both call /worker/jobs/{id}/complete at about the same time, and each commits its job before its on_job_finished runs. 4) Both db.get(Batch) see OPEN and both count succeeded=2. 5) Both flush UPDATE batches with no status filter and both _queue_callback, so 2 batch.callback jobs land on queue 'callbacks'. Variant: a finisher whose counts are stale (a manual retry happens in between) writes COMPLETED over COMPLETED_WITH_ERRORS, and the two callbacks report different statuses.",
+     "proof": "reproduced"
+    },
+    {
+     "file": "app/schemas.py",
+     "line": 16,
+     "function": "JobSpec.run_after",
+     "bug": "run_after accepts a timezone-aware datetime and build_job stores it as is. The SQLite DateTime type (and Postgres timestamp without time zone) drops the offset without converting, but the claim filter compares against naive UTC from utcnow().",
+     "repro": "1) POST /jobs with {\"queue\":\"q\",\"kind\":\"k\",\"run_after\":\"2026-11-17T10:00:00+05:30\"} (04:30 UTC). 2) It is stored as 10:00 and read as UTC. 3) /worker/claim at 05:00 UTC returns 204, and the job stays delayed 5.5h past the requested time. A negative offset makes it run early.",
+     "proof": "reproduced"
+    },
+    {
+     "file": "app/services/jobs.py",
+     "line": 74,
+     "function": "enqueue_job",
+     "bug": "`if key:` treats \"\" as no key and skips the pre-select, but build_job still stores idempotency_key=\"\". The unique constraint then makes \"\" act as a real key through the IntegrityError path.",
+     "repro": "1) A client sends POST /jobs {\"queue\":\"q\",\"kind\":\"a\",\"idempotency_key\":\"\"}, which returns 201 job 1. 2) Later it sends POST /jobs {\"queue\":\"q\",\"kind\":\"b\",\"payload\":{...},\"idempotency_key\":\"\"}. 3) The flush raises IntegrityError, the code rolls back and refetches, and the call returns 200 with job 1 (kind a). Job b is never created.",
+     "proof": "reproduced"
+    },
+    {
+     "file": "app/services/jobs.py",
+     "line": 203,
+     "function": "retry_job",
+     "bug": "The manual retry resets status, attempts, run_after, finished_at and last_error. It keeps lease_owner (complete_job never clears it), started_at and the previous run's JobOutput rows.",
+     "repro": "1) W1 claims and completes job 7 with output {rows:10}, and lease_owner stays 'W1'. 2) The tenant calls POST /jobs/7/retry. 3) GET /jobs/7 shows status=queued, lease_owner='W1', started_at from the old run. 4) GET /jobs/7/outputs returns [{rows:10}] for the queued job. After the re-run it returns 2 outputs with no attempt marker, so the client cannot tell which one is current.",
+     "proof": "reproduced"
+    }
+   ]
+  },
+  "ui-flows": {
+   "findings": [
+    {
+     "file": "src/flows/job-poller.ts",
+     "line": 58,
+     "function": "JobPoller.stop",
+     "bug": "Diff dropped `this.generation++` from stop(). Now stop() does not cancel a getJob already in flight. The generation guards at lines 69/78 still pass, so after stop that call writes job/error, re-arms the timer at line 83 and can call onFinished.",
+     "repro": "1) watch('j1'), with before-hook holding getJob. 2) User stops (or the timer callback has already fired and check is awaiting). 3) stop() sets polling=false and clears timer=null. 4) getJob resolves with status running: generation still matches, job is written, new timer scheduled, and polling carries on with polling=false. 5) Backend sets succeeded: onFinished(job) fires on a poller the user stopped. If getJob throws instead, error is written to the stopped chip.",
+     "proof": "reproduced"
+    }
+   ]
+  }
+ }
+}

@@ -7,7 +7,7 @@
 [![CI](https://github.com/ashusnapx/prodgate/actions/workflows/ci.yml/badge.svg)](https://github.com/ashusnapx/prodgate/actions/workflows/ci.yml)
 [![skills.sh](https://img.shields.io/badge/skills.sh-npx%20skills%20add%20ashusnapx%2Fprodgate-0F172A?style=flat-square)](https://skills.sh/ashusnapx/prodgate)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757?style=flat-square&logo=claude&logoColor=white)](#-install)
-[![Benchmark](https://img.shields.io/badge/benchmark-8%20apps%20%C2%B7%2059%20seeded%20bugs-3B82F6?style=flat-square)](#-benchmark)
+[![Benchmark](https://img.shields.io/badge/benchmark-102%20real%20bugs%20%C2%B7%20re--check%20%E2%88%9239%25%20tokens-3B82F6?style=flat-square)](#-benchmark)
 [![Proof](https://img.shields.io/badge/every%20bug-a%20failing%20test-8B5CF6?style=flat-square)](#-why-prodgate)
 [![Lean](https://img.shields.io/badge/caveman%20%2B%20ponytail-ultra-F59E0B?style=flat-square)](#-standing-on-the-shoulders-of-caveman-and-ponytail)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22C55E?style=flat-square)](LICENSE)
@@ -150,7 +150,19 @@ Most of an agent run's cost is the input it reads, re-sent on every turn. prodga
 | 🛡️ `prodgate` | The full pipeline, report-only |
 | 🔁 **re-check** | A small change lands in two apps, and each approach checks again |
 
-> 📈 **Results:** the first full run is being scored. Recall, precision, decoy hits and tokens measured from the agents' own usage logs will be published here. They will not be estimates.
+<img src="assets/results.svg" alt="Benchmark results: prodgate found 102 real bugs against 85 and 84; a re-check used 39% fewer tokens and gave 5 findings to read instead of 94" width="100%">
+
+| | 🤖 Plain review | 🧠 Prompt alone | 🛡️ prodgate |
+|---|---|---|---|
+| **Real bugs found** (distinct, each settled by a test) | 85 | 84 | **102** |
+| Seeded bugs found | 52/59 | **56/59** | 54/59 |
+| Every report ships with a failing test | ❌ | ❌ | ✅ |
+| 🔁 **Re-check after a 2-file change: tokens** | re-reads all 8 apps | 4.37M | **2.67M (−39%)** |
+| 🔁 **Re-check: findings to read** | everything again | 94 | **5 (−95%)** |
+| 💤 **Re-run on unchanged code** | full price again | 4.37M again | **0 tokens** |
+| First full run: tokens | **3.35M** | 3.87M | 35.0M |
+
+**The honest trade:** prodgate's first run costs about 10× a plain review, because it proves every finding with a test. It finds 20% more real bugs for that. After the first run, every re-check reads only what changed. Full method, per-class recall, raw data and limits are in [bench/RESULTS.md](bench/RESULTS.md).
 
 ## 🙏 Standing on the shoulders of caveman and ponytail
 

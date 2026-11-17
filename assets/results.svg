@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-labelledby="t d">
+<title id="t">prodgate benchmark results</title>
+<desc id="d">First run: distinct real bugs found, plain review 85, prompt alone 84, prodgate 102. Re-check after a 2-file change: tokens 4.37M vs 2.67M; findings to read 94 vs 5.</desc>
+<rect width="1200" height="340" rx="24" fill="#0B1020"/><rect x=".75" y=".75" width="1198.5" height="338.5" rx="23.5" fill="none" stroke="#FFFFFF" stroke-opacity=".08"/>
+<g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif">
+<text x="40" y="54" font-size="22" font-weight="800" fill="#E2E8F0">Benchmark</text>
+<text x="182" y="54" font-size="15" fill="#94A3B8">8 apps · 59 seeded bugs · 24 decoys · every unmatched finding settled by a test</text>
+<text x="40" y="104" font-size="17" font-weight="700" fill="#E2E8F0">Real bugs found</text>
+<text x="40" y="126" font-size="13" fill="#94A3B8">first run · distinct bugs · higher is better</text>
+<line x1="158" y1="146" x2="158" y2="282" stroke="#1E293B" stroke-width="1"/>
+<text x="148" y="170" font-size="14" text-anchor="end" fill="#94A3B8" font-weight="500">Plain review</text>
+<path d="M158,152h134.8a4,4 0 0 1 4,4v18a4,4 0 0 1 -4,4h-134.8z" fill="#64748B"/>
+<text x="304.83333333333337" y="170" font-size="14" fill="#E2E8F0" font-weight="500">85</text>
+<text x="148" y="214" font-size="14" text-anchor="end" fill="#94A3B8" font-weight="500">Prompt alone</text>
+<path d="M158,196h133.2a4,4 0 0 1 4,4v18a4,4 0 0 1 -4,4h-133.2z" fill="#64748B"/>
+<text x="303.2" y="214" font-size="14" fill="#E2E8F0" font-weight="500">84</text>
+<text x="148" y="258" font-size="14" text-anchor="end" fill="#E2E8F0" font-weight="700">prodgate</text>
+<path d="M158,240h162.6a4,4 0 0 1 4,4v18a4,4 0 0 1 -4,4h-162.6z" fill="#8B5CF6"/>
+<text x="332.6" y="258" font-size="14" fill="#E2E8F0" font-weight="700">102</text>
+<text x="430" y="104" font-size="17" font-weight="700" fill="#E2E8F0">Re-check: tokens</text>
+<text x="430" y="126" font-size="13" fill="#94A3B8">2-file change · lower is better · −39%</text>
+<line x1="548" y1="146" x2="548" y2="238" stroke="#1E293B" stroke-width="1"/>
+<text x="538" y="170" font-size="14" text-anchor="end" fill="#94A3B8" font-weight="500">Old way</text>
+<path d="M548,152h152.8a4,4 0 0 1 4,4v18a4,4 0 0 1 -4,4h-152.8z" fill="#64748B"/>
+<text x="712.8" y="170" font-size="14" fill="#E2E8F0" font-weight="500">4.37M</text>
+<text x="538" y="214" font-size="14" text-anchor="end" fill="#E2E8F0" font-weight="700">prodgate</text>
+<path d="M548,196h91.8a4,4 0 0 1 4,4v18a4,4 0 0 1 -4,4h-91.8z" fill="#8B5CF6"/>
+<text x="651.7632505920172" y="214" font-size="14" fill="#E2E8F0" font-weight="700">2.67M</text>
+<text x="820" y="104" font-size="17" font-weight="700" fill="#E2E8F0">Re-check: findings to read</text>
+<text x="820" y="126" font-size="13" fill="#94A3B8">repeats included · lower is better · −95%</text>
+<line x1="938" y1="146" x2="938" y2="238" stroke="#1E293B" stroke-width="1"/>
+<text x="928" y="170" font-size="14" text-anchor="end" fill="#94A3B8" font-weight="500">Old way</text>
+<path d="M938,152h152.8a4,4 0 0 1 4,4v18a4,4 0 0 1 -4,4h-152.8z" fill="#64748B"/>
+<text x="1102.8" y="170" font-size="14" fill="#E2E8F0" font-weight="500">94</text>
+<text x="928" y="214" font-size="14" text-anchor="end" fill="#E2E8F0" font-weight="700">prodgate</text>
+<path d="M938,196h4.3a4,4 0 0 1 4,4v18a4,4 0 0 1 -4,4h-4.3z" fill="#8B5CF6"/>
+<text x="954.3404255319149" y="214" font-size="14" fill="#E2E8F0" font-weight="700">5</text>
+<text x="40" y="300" font-size="12.5" fill="#94A3B8">Claude Opus 5.5. Tokens = every token the agents processed (input, cache, output), summed from their own usage logs.</text>
+<text x="40" y="320" font-size="12.5" fill="#94A3B8">Both re-checks caught both new bugs. A re-run on unchanged code costs prodgate 0 tokens.</text>
+</g></svg>
