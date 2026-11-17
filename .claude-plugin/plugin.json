@@ -1,6 +1,6 @@
 {
   "name": "prodgate",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A QA pipeline for Claude Code that finds and fixes state bugs (races, stuck states, stale overwrites, missing tenant checks) until a round finds nothing. Every bug comes with a failing test, and re-checks read only what changed.",
   "author": { "name": "ashusnapx", "url": "https://github.com/ashusnapx" },
   "homepage": "https://github.com/ashusnapx/prodgate",
