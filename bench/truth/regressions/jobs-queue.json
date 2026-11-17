@@ -1,0 +1,16 @@
+{
+  "app": "jobs-queue",
+  "bugs": [
+    {
+      "id": "re-1",
+      "class": "double-submit",
+      "file": "app/services/batches.py",
+      "lines": [42, 58],
+      "function": "on_job_finished",
+      "summary": "the batch close became a plain read-then-write: two jobs finishing at once both see the batch open, both close it and both queue the callback",
+      "repro": "the last two jobs of a batch finish in two sessions; each loads the batch as open and counts all jobs ended; both set it completed and both queue a callback job, so the customer's webhook fires twice",
+      "severity": "high"
+    }
+  ],
+  "decoys": []
+}

@@ -1,0 +1,16 @@
+{
+  "app": "ui-flows",
+  "bugs": [
+    {
+      "id": "re-2",
+      "class": "ui-unhandled",
+      "file": "src/flows/job-poller.ts",
+      "lines": [58, 84],
+      "function": "stop",
+      "summary": "stop() no longer starts a new generation, so a response already in flight is accepted after Stop and schedules the next poll: polling restarts after the user stopped it",
+      "repro": "watch(job); while getJob is pending, call stop(); the response resolves with a running job; check() sees the same generation, stores the job and sets a new timer, so polling continues with polling=false",
+      "severity": "medium"
+    }
+  ],
+  "decoys": []
+}

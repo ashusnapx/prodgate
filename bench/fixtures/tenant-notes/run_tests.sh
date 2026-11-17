@@ -1,13 +1,12 @@
-#!/usr/bin/env bash
+#!/bin/bash
+# Runs this app's test suite. Python comes from $BENCH_PYTHON, or the nearest .venv above this folder.
 set -euo pipefail
 cd "$(dirname "$0")"
 export PYTHONDONTWRITEBYTECODE=1
-BENCH_VENV="$(cd ../.. && pwd)/.venv"
-if [ -n "${BENCH_PYTHON:-}" ]; then
-  PY="$BENCH_PYTHON"
-elif [ -x "$BENCH_VENV/bin/python" ]; then
-  PY="$BENCH_VENV/bin/python"
-else
-  PY="python3"
-fi
-exec "$PY" -m pytest -q -p no:cacheprovider "$@"
+PY="${BENCH_PYTHON:-}"
+d="$PWD"
+while [ -z "$PY" ] && [ "$d" != / ]; do
+  [ -x "$d/.venv/bin/python" ] && PY="$d/.venv/bin/python"
+  d="$(dirname "$d")"
+done
+exec "${PY:-python3}" -m pytest -q -p no:cacheprovider "$@"

@@ -9,6 +9,8 @@ shift || true
 apps=("$@")
 [ ${#apps[@]} -eq 0 ] && apps=($(ls "$here/fixtures"))
 mkdir -p "$work"
+# the Python fixtures find their venv by looking upward for .venv
+[ -d "$here/.venv" ] && [ ! -e "$work/.venv" ] && ln -s "$here/.venv" "$work/.venv"
 git_() { git -c user.name=bench -c user.email=bench@example.com -c commit.gpgsign=false "$@"; }
 
 echo "["
