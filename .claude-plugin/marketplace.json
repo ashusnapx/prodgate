@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "prodgate",
+  "description": "QA that ends in safe-for-production: state-bug hunting with proof, in rounds, on frozen commits.",
+  "owner": { "name": "ashusnapx", "url": "https://github.com/ashusnapx" },
+  "plugins": [
+    {
+      "name": "prodgate",
+      "description": "Find and fix state bugs until a round finds nothing. Every bug comes with a failing test.",
+      "source": "./",
+      "category": "development"
+    }
+  ]
+}

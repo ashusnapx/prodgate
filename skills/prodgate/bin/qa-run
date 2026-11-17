@@ -1,0 +1,58 @@
+#!/bin/bash
+# prodgate: run a test/build command under one shared lock, so only one heavy process runs at a time,
+# and hand back compact output: one line on a pass, only the failing lines and the tail on a fail.
+# Usage: qa-run <command...>
+#   QA_RAW=1               full output
+#   QA_WAIT_FOR_SERVERS=1  wait (up to 8 min) while a dev server is up; on by default on machines with 8 GB or less
+#   QA_ALLOW_SERVER=1      never wait
+LOCK="${PRODGATE_HOME:-$HOME/.claude/qa}/test.lock"
+mkdir -p "$(dirname "$LOCK")"
+
+mem=$(sysctl -n hw.memsize 2>/dev/null || awk '/MemTotal/{print $2*1024}' /proc/meminfo 2>/dev/null || echo 0)
+WAIT="${QA_WAIT_FOR_SERVERS:-$([ "${mem:-0}" -gt 0 ] && [ "$mem" -le 8589934592 ] && echo 1)}"
+
+servers() {
+  # never matches itself or its own shell
+  ps -axo pid=,command= |
+    grep -E "next-server|next dev|next start|uvicorn|vite( |$)|webpack-dev-server|rails server|manage.py runserver" |
+    grep -vE "grep|qa-run| -c |lockf"
+}
+
+if [ -n "$WAIT" ] && [ -z "$QA_ALLOW_SERVER" ]; then
+  for i in $(seq 1 32); do
+    s="$(servers)"
+    [ -z "$s" ] && break
+    [ "$i" -eq 1 ] && echo "qa-run: waiting for a dev server to stop: $(echo "$s" | head -1 | cut -c1-90)" >&2
+    sleep 15
+  done
+  if [ -n "$(servers)" ]; then
+    echo "qa-run: a dev server is still running after 8 min; stop it or set QA_ALLOW_SERVER=1" >&2
+    exit 75
+  fi
+fi
+
+locked() {
+  if [ -x /usr/bin/lockf ]; then /usr/bin/lockf -k "$LOCK" "$@"
+  elif command -v flock >/dev/null 2>&1; then flock "$LOCK" "$@"
+  else "$@"; fi
+}
+
+[ -n "$QA_RAW" ] && { locked "$@"; exit $?; }
+# caveman's output shrinker, when installed, does this better than the fallback below
+command -v caveman >/dev/null 2>&1 && { locked caveman shrink -- "$@"; exit $?; }
+
+out="$(mktemp)"
+trap 'rm -f "$out"' EXIT
+locked "$@" >"$out" 2>&1
+code=$?
+n=$(wc -l <"$out" | tr -d ' ')
+if [ "$code" -eq 0 ]; then
+  summary=$(grep -iE '[0-9]+ (passed|failed|tests?)|^# (pass|fail)|^ok ' "$out" | tail -2 | tr '\n' ' ' | cut -c1-200)
+  echo "qa-run: PASS ($n lines hidden, QA_RAW=1 shows them) $summary"
+else
+  grep -nE 'FAIL|Error|assert|Traceback|not ok|✗|✖' "$out" | head -30
+  echo "--- last 40 of $n lines ---"
+  tail -40 "$out"
+  echo "qa-run: FAIL (exit $code)"
+fi
+exit "$code"

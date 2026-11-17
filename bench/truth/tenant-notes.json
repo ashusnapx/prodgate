@@ -1,0 +1,95 @@
+{
+  "app": "tenant-notes",
+  "bugs": [
+    {
+      "id": "tn-1",
+      "class": "scope",
+      "file": "app/services/exports.py",
+      "lines": [37, 43],
+      "function": "collect_notes",
+      "summary": "when an export names note_ids, notes are selected by id only and the workspace filter is dropped, so a member can export any workspace's notes",
+      "repro": "olivia (workspace 1) POSTs /workspaces/1/exports with note_ids=[id of a note in tom's workspace 2]; the download contains tom's note",
+      "severity": "high"
+    },
+    {
+      "id": "tn-2",
+      "class": "illegal-transition",
+      "file": "app/routers/shares.py",
+      "lines": [45, 55],
+      "function": "download_shared_note",
+      "summary": "the /s/{token}/raw route does its own lookup and checks expiry and deleted note but not revoked_at, so a revoked share link still downloads the note",
+      "repro": "create a share link, revoke it; GET /s/{token} -> 404 but GET /s/{token}/raw -> 200 with the note's Markdown",
+      "severity": "high"
+    },
+    {
+      "id": "tn-3",
+      "class": "illegal-transition",
+      "file": "app/services/notes.py",
+      "lines": [88, 94],
+      "function": "restore_note",
+      "summary": "restoring a note from the trash never checks that its workspace is live (the trash route uses require_member, not require_live_member), so a note is resurrected inside a deleted workspace and its old share links work again",
+      "repro": "share a note, delete the workspace (link now 404), POST /workspaces/{ws}/trash/{note}/restore -> 200; GET /s/{token} -> 200 although the workspace is still deleted",
+      "severity": "medium"
+    },
+    {
+      "id": "tn-4",
+      "class": "race",
+      "file": "app/services/notes.py",
+      "lines": [63, 80],
+      "function": "update_note",
+      "summary": "the base_version check compares against the loaded row in Python and then writes version+1 with a plain UPDATE (no WHERE version = base), so two concurrent edits from the same version both succeed and the first is lost",
+      "repro": "two editors open note at version 1 and save at the same moment; both PATCH requests load version 1, both pass the check, both return 200; the final body is the second edit and the first edit is silently lost (version 2, not a 409)",
+      "severity": "high"
+    },
+    {
+      "id": "tn-5",
+      "class": "double-submit",
+      "file": "app/services/notes.py",
+      "lines": [35, 60],
+      "function": "create_note",
+      "summary": "request_id de-duplication is a SELECT then INSERT with no unique constraint on (workspace_id, created_by, request_id), so a double click that sends two creates at once makes two notes",
+      "repro": "send two POST /workspaces/{ws}/notes with the same request_id concurrently; both see no existing note and both insert; the list shows two copies",
+      "severity": "medium"
+    },
+    {
+      "id": "tn-6",
+      "class": "stuck",
+      "file": "app/services/exports.py",
+      "lines": [29, 34],
+      "function": "cancel_export",
+      "summary": "cancel always moves a job to cancelling and relies on the runner to finish it, but the runner only claims queued jobs, so a job cancelled while still queued stays cancelling forever; cancelling counts as active in the one-export-per-workspace index, so no export can ever run again",
+      "repro": "start an export and cancel it before the background task picks it up; run_export returns without touching it; the job shows cancelling forever, DELETE again -> 409 and every new POST /exports -> 409 already in progress",
+      "severity": "high"
+    },
+    {
+      "id": "tn-7",
+      "class": "overwrite",
+      "file": "app/services/exports.py",
+      "lines": [62, 81],
+      "function": "run_export",
+      "summary": "the runner writes status=done from its in-memory copy at the end without re-checking, overwriting a cancel (cancelling) that arrived while it was rendering, so a cancelled export produces a downloadable file",
+      "repro": "start an export of a large workspace; cancel while it renders (status cancelling); the runner then commits status=done and /download returns the file",
+      "severity": "medium"
+    }
+  ],
+  "decoys": [
+    {
+      "id": "tn-d1",
+      "file": "app/services/notes.py",
+      "lines": [8, 15],
+      "why_correct": "note lookups filter on both note id and the caller's workspace_id (from their membership), so a note id from another workspace is a 404 for show, edit, delete and restore"
+    },
+    {
+      "id": "tn-d2",
+      "file": "app/services/exports.py",
+      "lines": [52, 59],
+      "why_correct": "_claim is a conditional UPDATE queued->running with a rowcount check, so two runners for the same job cannot both run it"
+    },
+    {
+      "id": "tn-d3",
+      "file": "app/services/workspaces.py",
+      "lines": [42, 65],
+      "why_correct": "delete stamps the workspace and its live notes with the same deleted_at value in one transaction, and restore brings back only notes whose deleted_at equals the workspace's, so notes trashed earlier stay in the trash; the timestamp equality is exact because the same Python value is written to both"
+    }
+  ]
+}

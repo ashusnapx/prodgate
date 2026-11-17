@@ -1,0 +1,105 @@
+{
+  "app": "inventory-orders",
+  "bugs": [
+    {
+      "id": "io-1",
+      "class": "race",
+      "file": "app/services/stock.py",
+      "lines": [19, 31],
+      "function": "reserve",
+      "summary": "stock check and reservation are read-then-write in Python (available() on the loaded product, then product.reserved = product.reserved + qty), with no lock or conditional UPDATE, so concurrent orders oversell",
+      "repro": "product has on_hand=1; two customers POST /orders for 1 unit at the same time; both load the product with reserved=0 before either commits, both pass the check and write reserved=1; two orders are placed for one unit (reserved=1, two held reservations)",
+      "severity": "high"
+    },
+    {
+      "id": "io-2",
+      "class": "stuck",
+      "file": "app/services/orders.py",
+      "lines": [99, 106],
+      "function": "place_order",
+      "summary": "on a declined card the order goes to payment_failed but the stock reserved just before is never released; payment_failed is in FINAL_STATES so cancel refuses it and the sweeper only looks at placed orders, so the units stay reserved forever",
+      "repro": "product on_hand=1; POST /orders with card_token tok_decline -> payment_failed; GET /products/1 shows reserved=1, available=0; POST /orders/{id}/cancel -> 409; expire_unconfirmed_orders does not touch it; nobody can buy the unit again",
+      "severity": "high"
+    },
+    {
+      "id": "io-3",
+      "class": "illegal-transition",
+      "file": "app/services/orders.py",
+      "lines": [130, 146],
+      "function": "cancel_order",
+      "summary": "cancel is allowed from OPEN_STATES, which includes shipped, so a customer can cancel an order that has already left the warehouse and gets a full refund",
+      "repro": "place, confirm, ship an order; customer POST /orders/{id}/cancel -> 200 cancelled and the captured payment is refunded in full while the parcel is with the carrier",
+      "severity": "high"
+    },
+    {
+      "id": "io-4",
+      "class": "double-submit",
+      "file": "app/services/returns.py",
+      "lines": [68, 87],
+      "function": "approve_return",
+      "summary": "approve only refuses rejected returns, not already-approved ones, so approving twice refunds and restocks twice",
+      "repro": "delivered order of 3 x 1000; return 1 unit; staff POST /returns/{id}/approve twice (double click) -> two refunds of 1000 at the gateway and on_hand goes up by 2",
+      "severity": "high"
+    },
+    {
+      "id": "io-5",
+      "class": "overwrite",
+      "file": "app/services/orders.py",
+      "lines": [163, 183],
+      "function": "apply_warehouse_event",
+      "summary": "a packing event sets status=packing unconditionally (only cancelled/payment_failed are refused), so a late or redelivered packing webhook moves a shipped or delivered order back to packing",
+      "repro": "confirm order; warehouse sends shipped, then a delayed packing event arrives; GET /orders/{id} shows status packing instead of shipped (and the order can now be shipped or cancelled again)",
+      "severity": "medium"
+    },
+    {
+      "id": "io-6",
+      "class": "scope",
+      "file": "app/routers/returns.py",
+      "lines": [12, 20],
+      "function": "request_return",
+      "summary": "creating a return loads the order by id without checking it belongs to the calling customer (customer_id is taken but never compared), unlike the order routes",
+      "repro": "alice's order 1 is delivered; mallory POST /orders/1/returns with X-Customer-Id: mallory -> 201, a return (and later refund) is filed against alice's order",
+      "severity": "high"
+    },
+    {
+      "id": "io-7",
+      "class": "illegal-transition",
+      "file": "app/services/orders.py",
+      "lines": [148, 160],
+      "function": "ship_order",
+      "summary": "ship is allowed from placed, skipping confirm, so goods leave the warehouse with the payment only authorized, never captured",
+      "repro": "place an order (payment authorized); staff POST /orders/{id}/ship -> 200 shipped with captured_cents=0; the authorization can expire and the shop is never paid",
+      "severity": "high"
+    },
+    {
+      "id": "io-8",
+      "class": "race",
+      "file": "app/services/returns.py",
+      "lines": [49, 65],
+      "function": "request_return",
+      "summary": "the remaining-to-return check reads returned_quantity() then inserts the new return with no lock or constraint, so two concurrent return requests for the same line both pass",
+      "repro": "delivered order with 1 unit; the customer submits the return form twice at once; both requests read returned=0, both insert, two returns for one unit exist and both can be approved",
+      "severity": "medium"
+    }
+  ],
+  "decoys": [
+    {
+      "id": "io-d1",
+      "file": "app/services/orders.py",
+      "lines": [40, 49],
+      "why_correct": "_transition is a compare-and-swap: UPDATE ... WHERE status IN (allowed) and it checks rowcount, so concurrent confirm/cancel/ship calls cannot both win; confirm_order treats a lost race to confirmed as an idempotent success without capturing again"
+    },
+    {
+      "id": "io-d2",
+      "file": "app/services/orders.py",
+      "lines": [76, 97],
+      "why_correct": "the idempotency lookup is check-then-insert, but (customer_id, idempotency_key) is a unique constraint and the IntegrityError path rolls back and returns the winner's order, so concurrent retries create one order"
+    },
+    {
+      "id": "io-d3",
+      "file": "app/services/stock.py",
+      "lines": [34, 47],
+      "why_correct": "release flips the reservation held->released with a conditional UPDATE, checks rowcount, and only then decrements reserved with a SQL-side expression, so a double cancel or cancel+sweeper releases stock once"
+    }
+  ]
+}

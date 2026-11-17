@@ -1,0 +1,138 @@
+{
+  "app": "ui-flows",
+  "bugs": [
+    {
+      "id": "uf-1",
+      "class": "ui-unhandled",
+      "file": "src/flows/job-poller.ts",
+      "lines": [
+        71,
+        77
+      ],
+      "function": "check",
+      "summary": "polling only stops for succeeded or failed; a cancelled job is treated as still in progress, so the poller checks it every interval forever and never calls onFinished",
+      "repro": "watch a job whose status is cancelled; the label says Cancelled but polling stays true and a new timer is scheduled every 2 s indefinitely",
+      "severity": "medium"
+    },
+    {
+      "id": "uf-2",
+      "class": "stuck",
+      "file": "src/flows/job-poller.ts",
+      "lines": [
+        78,
+        83
+      ],
+      "function": "check",
+      "summary": "any failed status check (including a transient 503 or network error) stops polling for good, so the chip stays on the last status (e.g. Running 40%) even after the job finishes",
+      "repro": "watch a running job; one getJob call fails with 503; polling stops; the job then succeeds on the server but the chip keeps showing Running and onFinished never fires",
+      "severity": "medium"
+    },
+    {
+      "id": "uf-3",
+      "class": "wrong-item",
+      "file": "src/flows/investment-wizard.ts",
+      "lines": [
+        73,
+        81
+      ],
+      "function": "open",
+      "summary": "open() for a different fund resets the step, errors and result but not the answers, so the previous fund's company and terms are carried into the new fund's wizard and submitted there",
+      "repro": "open the wizard for fund-1, type company Acme, close; open it for fund-2; the Company field already says Acme and Submit creates Acme under fund-2",
+      "severity": "high"
+    },
+    {
+      "id": "uf-4",
+      "class": "illegal-transition",
+      "file": "src/flows/investment-wizard.ts",
+      "lines": [
+        102,
+        111
+      ],
+      "function": "goTo",
+      "summary": "the stepper jumps to any step already reached without validating the current one, and submit does not re-validate, so after going back and making Terms invalid the user can jump to Review and submit invalid terms",
+      "repro": "complete all steps, click Terms in the stepper, set ownership to 150, click Review in the stepper, Submit; an investment with 150% ownership is created",
+      "severity": "medium"
+    },
+    {
+      "id": "uf-5",
+      "class": "wrong-item",
+      "file": "src/flows/scenario-bar.ts",
+      "lines": [
+        47,
+        51
+      ],
+      "function": "reset",
+      "summary": "Reset restores the default inputs but keeps openedId, openedName and revision, so the bar still names the old scenario and the next Save overwrites that saved scenario instead of creating a new one",
+      "repro": "open saved scenario Base (exit multiple 9), Reset, change hold years, Save as 'Fresh'; Base is overwritten with the default inputs and no new scenario is created",
+      "severity": "high"
+    },
+    {
+      "id": "uf-6",
+      "class": "ui-unhandled",
+      "file": "src/flows/scenario-bar.ts",
+      "lines": [
+        53,
+        63
+      ],
+      "function": "open",
+      "summary": "open() only asks before discarding edits when a saved scenario is already open; unsaved edits to a new, untitled scenario are thrown away without asking",
+      "repro": "on a fresh bar change EBITDA margin to 40%, then open a saved scenario; confirmDiscard is never called and the edits are lost",
+      "severity": "medium"
+    },
+    {
+      "id": "uf-7",
+      "class": "stuck",
+      "file": "src/flows/upload-queue.ts",
+      "lines": [
+        124,
+        130
+      ],
+      "function": "persist",
+      "summary": "the stored queue keeps only queued and failed files; a file is dropped from the store the moment it starts uploading, so a reload or crash mid-upload loses it for good",
+      "repro": "drop a.pdf; while it is uploading the store no longer contains it; reload the page (restore()) and the tray is empty and a.pdf is never uploaded",
+      "severity": "high"
+    },
+    {
+      "id": "uf-8",
+      "class": "double-submit",
+      "file": "src/flows/upload-queue.ts",
+      "lines": [
+        75,
+        80
+      ],
+      "function": "retry",
+      "summary": "retry calls upload() directly and the item only leaves the failed status after createUploadSession resolves, so a double click on Retry starts two uploads of the same file (and bypasses the two-at-a-time limit)",
+      "repro": "a file fails; click Retry twice quickly; two upload sessions are created and completed and the data room gets the file twice",
+      "severity": "medium"
+    }
+  ],
+  "decoys": [
+    {
+      "id": "uf-d1",
+      "file": "src/flows/job-poller.ts",
+      "lines": [
+        49,
+        63
+      ],
+      "why_correct": "watch() and stop() bump the generation and clear the timer, and every response is ignored unless its generation is current, so a slow response for the previous job cannot overwrite the new one and no timer survives stop()"
+    },
+    {
+      "id": "uf-d2",
+      "file": "src/flows/scenario-bar.ts",
+      "lines": [
+        69,
+        88
+      ],
+      "why_correct": "save sets the baseline to the snapshot it sent, not to the live inputs, so edits typed while the save was in flight still show as unsaved; the saving flag blocks a second concurrent save"
+    },
+    {
+      "id": "uf-d3",
+      "file": "src/flows/upload-queue.ts",
+      "lines": [
+        92,
+        104
+      ],
+      "why_correct": "upload() never rejects (it catches every error), so the .finally always frees the slot and pumps the next file; failures cannot leak concurrency slots"
+    }
+  ]
+}

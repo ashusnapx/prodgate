@@ -1,0 +1,138 @@
+{
+  "app": "ui-mutations",
+  "bugs": [
+    {
+      "id": "um-1",
+      "class": "ui-unhandled",
+      "file": "src/screens/document-list.ts",
+      "lines": [
+        91,
+        105
+      ],
+      "function": "addDocument",
+      "summary": "the pending 'saving' row is removed in a per-call onSuccess, but per-call callbacks only run for the latest mutate call, so when two titles are added before the first save returns the first row is never removed (spinner forever)",
+      "repro": "add 'One' and 'Two' quickly while createDoc is slow; both documents are created and appear in the list, but the 'One' saving row stays in pendingRows forever",
+      "severity": "medium"
+    },
+    {
+      "id": "um-2",
+      "class": "ui-unhandled",
+      "file": "src/screens/fund-form.ts",
+      "lines": [
+        106,
+        125
+      ],
+      "function": "submit",
+      "summary": "a failed save sets errorMessage, but neither submit nor the success callback clears it, so the error banner stays after a later save succeeds",
+      "repro": "edit a fund, Save fails with a server error (banner shows); Save again and it succeeds; fund is saved but errorMessage still shows 'Something went wrong'",
+      "severity": "low"
+    },
+    {
+      "id": "um-3",
+      "class": "wrong-item",
+      "file": "src/screens/document-list.ts",
+      "lines": [
+        116,
+        118
+      ],
+      "function": "deleteDocument",
+      "summary": "deleting a document removes the row but leaves selectedId/selected pointing at the deleted document, so the side panel keeps showing it and its actions hit a 404",
+      "repro": "select doc-1, delete it; the list no longer has it but list.selectedId is still 'doc-1' and list.selected is the deleted doc",
+      "severity": "medium"
+    },
+    {
+      "id": "um-4",
+      "class": "wrong-item",
+      "file": "src/screens/fund-form.ts",
+      "lines": [
+        80,
+        96
+      ],
+      "function": "open",
+      "summary": "open() only builds the draft when none exists (draft ??= ...) and never resets dirty or field errors, so switching to another fund keeps the previous fund's draft; Save then writes fund A's edits onto fund B",
+      "repro": "open Alpha, change the name to 'Alpha edited', open Beta; the form still shows 'Alpha edited' and is dirty; Save renames Beta to 'Alpha edited'",
+      "severity": "high"
+    },
+    {
+      "id": "um-5",
+      "class": "ui-unhandled",
+      "file": "src/screens/document-list.ts",
+      "lines": [
+        48,
+        60
+      ],
+      "function": "DocumentListController.star (onMutate/onError)",
+      "summary": "the optimistic star mutates the cached doc in place and keeps a reference to that same array as 'previous', so the rollback on error restores the already-changed data and the star stays on",
+      "repro": "setStarred fails on the server; toggleStar(doc); star.state is error but docs[0].starred stays true",
+      "severity": "medium"
+    },
+    {
+      "id": "um-6",
+      "class": "ui-unhandled",
+      "file": "src/screens/review-panel.ts",
+      "lines": [
+        14,
+        27
+      ],
+      "function": "availableActions",
+      "summary": "Approve and Send back are offered for every in-review document, including the current user's own, which the server always refuses with 403",
+      "repro": "ana opens her own in_review document; the panel offers Approve and Send back; clicking Approve fails with 'You cannot review your own document'",
+      "severity": "low"
+    },
+    {
+      "id": "um-7",
+      "class": "wrong-item",
+      "file": "src/screens/review-panel.ts",
+      "lines": [
+        58,
+        67
+      ],
+      "function": "show",
+      "summary": "show() writes the activity response without checking the panel still shows that document, so a slow history request for the previous document overwrites the new document's history",
+      "repro": "select A (history request slow), then B (fast); after A's response arrives the panel shows document B with A's history",
+      "severity": "medium"
+    },
+    {
+      "id": "um-8",
+      "class": "stuck",
+      "file": "src/screens/review-panel.ts",
+      "lines": [
+        86,
+        94
+      ],
+      "function": "archiveMany",
+      "summary": "busy is cleared only after every archive succeeds (no try/finally), so one refused document leaves the bulk spinner on and the bulk action disabled forever",
+      "repro": "bulk archive a draft and an in_review document; the second is refused with 409; archiveMany rejects and panel.busy stays true, canArchiveSelection stays false",
+      "severity": "medium"
+    }
+  ],
+  "decoys": [
+    {
+      "id": "um-d1",
+      "file": "src/lib/mutation.ts",
+      "lines": [
+        64,
+        92
+      ],
+      "why_correct": "per-call callbacks and state updates only for the latest call (isLatest) is the documented React Query behaviour; the creation-time options still run for every call and the promise always settles"
+    },
+    {
+      "id": "um-d2",
+      "file": "src/screens/fund-form.ts",
+      "lines": [
+        67,
+        73
+      ],
+      "why_correct": "the creation-time onSuccess caches the saved fund under the id from the mutation variables, not the currently open fundId, so a save that finishes after switching funds updates the right cache entry"
+    },
+    {
+      "id": "um-d3",
+      "file": "src/lib/query-client.ts",
+      "lines": [
+        44,
+        65
+      ],
+      "why_correct": "a second fetchQuery for a key with a request in flight returns that request instead of starting another; it ignores the second fetcher, which is fine because both load the same key, and the next call after it settles fetches again"
+    }
+  ]
+}
