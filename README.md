@@ -5,7 +5,7 @@
 <h3>The QA pipeline for Claude Code that hunts state bugs until zero,<br>and proves every one with a failing test.</h3>
 
 [![CI](https://github.com/ashusnapx/prodgate/actions/workflows/ci.yml/badge.svg)](https://github.com/ashusnapx/prodgate/actions/workflows/ci.yml)
-[![skills.sh](https://skills.sh/b/ashusnapx/prodgate)](https://skills.sh/ashusnapx/prodgate)
+[![skills.sh](https://img.shields.io/badge/skills.sh-npx%20skills%20add%20ashusnapx%2Fprodgate-0F172A?style=flat-square)](https://skills.sh/ashusnapx/prodgate)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757?style=flat-square&logo=claude&logoColor=white)](#-install)
 [![Benchmark](https://img.shields.io/badge/benchmark-8%20apps%20%C2%B7%2059%20seeded%20bugs-3B82F6?style=flat-square)](#-benchmark)
 [![Proof](https://img.shields.io/badge/every%20bug-a%20failing%20test-8B5CF6?style=flat-square)](#-why-prodgate)
@@ -28,7 +28,7 @@ It is built for the bugs that pass review and code coverage and still break prod
 @@ ◆ prodgate · round 1 · shop-api@1a2b3c4 @@
   🗺️  23 state machines mapped · 🔴 9 high risk · 🟡 10 medium · 🟢 4 low
   🔎 41 reported · ✨ 41 new
-- ⚖️  ❌ 12 refuted with quoted code   (orders.py:88 has WHERE status='placed' and checks rowcount)
+- ⚖️  ❌ 12 refuted with quoted code (e.g. orders.py:88 checks rowcount)
 + ⚖️  ✅ 22 confirmed · 🟡 7 unproven, sent to a test
 + 🛠️  ✅ 27 fixed with full evidence · 🚫 2 not reproduced, left alone
 @@ ◆ prodgate · round 2 · scope: 14 changed files + 9 callers · ♻️ 312 files skipped @@
@@ -63,8 +63,8 @@ Status columns, boolean flags, nullable timestamps, job queues, sessions, wizard
 ## 🧩 How it works
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontFamily':'-apple-system, Segoe UI, Helvetica, sans-serif','fontSize':'14px','lineColor':'#94A3B8','primaryTextColor':'#0F172A'}}}%%
-flowchart LR
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'-apple-system, Segoe UI, Helvetica, sans-serif','fontSize':'15px','lineColor':'#94A3B8','primaryTextColor':'#0F172A','edgeLabelBackground':'#F1F5F9'}}}%%
+flowchart TD
   A([📌 Freeze a commit]):::freeze --> B{📒 Ledger<br/>what changed?}:::ledger
   B -- nothing --> Z([💤 0 agents · 0 tokens]):::zero
   B -- diff + callers --> C[🗺️ Map<br/>state machines]:::map --> D[🔎 Hunt<br/>per risky machine]:::hunt --> E[⚖️ Check<br/>per file group]:::check
